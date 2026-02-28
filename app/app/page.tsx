@@ -151,7 +151,7 @@ export default function Home() {
                     fontSize: 14,
                   }}
                 >
-                  Discover and participate in the latest token launches on Hedera
+                  Discover and participate in the latest project launches on Hedera
                 </p>
               </div>
 
@@ -250,7 +250,7 @@ export default function Home() {
                 marginBottom: 32,
               }}
             >
-              Track your contributions, claimed tokens, and staking positions.
+              Track your contributions, claimed assets, and staking positions.
             </p>
 
             <div
@@ -269,7 +269,7 @@ export default function Home() {
                   icon: "💰",
                 },
                 {
-                  label: "Total Tokens",
+                  label: "Total Assets",
                   value: "5 Assets",
                   color: "var(--acid)",
                   icon: "🪙",
@@ -458,7 +458,7 @@ export default function Home() {
               style={{
                 width: 24,
                 height: 24,
-                background: "linear-gradient(135deg, var(--cyan), var(--magenta))",
+                background: "var(--cyan)",
                 borderRadius: 6,
                 display: "flex",
                 alignItems: "center",

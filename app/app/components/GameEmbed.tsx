@@ -23,7 +23,7 @@ const GAMES = [
     },
     {
         id: "memory",
-        name: "Token Match",
+        name: "Asset Match",
         icon: "🧠",
         color: "var(--magenta)",
         description: "Match crypto symbols",
@@ -141,7 +141,7 @@ function ClickerGame() {
                     width: 100,
                     height: 100,
                     borderRadius: "50%",
-                    background: "linear-gradient(135deg, var(--gold), var(--gold-dim))",
+                    background: "var(--gold)",
                     border: "3px solid var(--gold)",
                     cursor: "pointer",
                     fontSize: 36,

@@ -54,7 +54,7 @@ export default function LaunchCard({
                 overflow: "hidden",
             }}
         >
-            {/* Glow effect */}
+            {/* Top border */}
             <div
                 style={{
                     position: "absolute",
@@ -64,9 +64,9 @@ export default function LaunchCard({
                     height: 2,
                     background:
                         launch.state === 0
-                            ? "linear-gradient(90deg, var(--cyan), var(--acid))"
+                            ? "var(--cyan)"
                             : launch.state === 2
-                                ? "linear-gradient(90deg, var(--gold), var(--magenta))"
+                                ? "var(--cyan)"
                                 : "var(--void-border)",
                     opacity: launch.state === 0 ? 1 : 0.5,
                 }}
@@ -87,10 +87,7 @@ export default function LaunchCard({
                             width: 44,
                             height: 44,
                             borderRadius: 12,
-                            background: `linear-gradient(135deg, ${["var(--cyan)", "var(--magenta)", "var(--acid)", "var(--gold)"][
-                                launch.id % 4
-                            ]
-                                }, var(--void-elevated))`,
+                            background: "var(--cyan)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -135,7 +132,6 @@ export default function LaunchCard({
                                 borderRadius: "50%",
                                 background: "currentColor",
                                 display: "inline-block",
-                                animation: "pulse-glow-cyan 2s infinite",
                             }}
                         />
                     )}
@@ -160,7 +156,7 @@ export default function LaunchCard({
                             fontWeight: 600,
                         }}
                     >
-                        {launch.totalRaised.toLocaleString()} ℏ
+                        {launch.totalRaised.toLocaleString("en-US")} ℏ
                     </span>
                     <span
                         style={{
@@ -169,7 +165,7 @@ export default function LaunchCard({
                             color: "var(--text-dim)",
                         }}
                     >
-                        {launch.hardCap.toLocaleString()} ℏ
+                        {launch.hardCap.toLocaleString("en-US")} ℏ
                     </span>
                 </div>
                 <div className="progress-bar">
@@ -201,7 +197,7 @@ export default function LaunchCard({
                             color: "var(--text-dim)",
                         }}
                     >
-                        Soft: {launch.softCap.toLocaleString()} ℏ
+                        Soft: {launch.softCap.toLocaleString("en-US")} ℏ
                     </span>
                 </div>
             </div>

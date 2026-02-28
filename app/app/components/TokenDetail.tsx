@@ -67,10 +67,7 @@ export default function TokenDetail({
                             width: 56,
                             height: 56,
                             borderRadius: 14,
-                            background: `linear-gradient(135deg, ${["var(--cyan)", "var(--magenta)", "var(--acid)", "var(--gold)"][
-                                tokenData.id % 4
-                            ]
-                                }, var(--void-elevated))`,
+                            background: "var(--cyan)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -273,9 +270,9 @@ export default function TokenDetail({
                                 lineHeight: 1.7,
                             }}
                         >
-                            {tokenData.name} is a community-driven token launched on HeadStart.
-                            The token features automatic liquidity provisioning on SaucerSwap and
-                            built-in staking rewards. Contributors receive tokens proportional to
+                            {tokenData.name} is a community-driven project launched on HeadStart.
+                            The project features automatic liquidity provisioning on SaucerSwap and
+                            built-in staking rewards. Contributors receive assets proportional to
                             their HBAR contribution after the launch finalizes.
                         </p>
                     </div>
@@ -301,7 +298,7 @@ export default function TokenDetail({
                                         fontWeight: 700,
                                     }}
                                 >
-                                    {tokenData.totalRaised.toLocaleString()} ℏ
+                                    {tokenData.totalRaised.toLocaleString("en-US")} ℏ
                                 </span>
                                 <span
                                     style={{
@@ -310,7 +307,7 @@ export default function TokenDetail({
                                         color: "var(--text-dim)",
                                     }}
                                 >
-                                    {tokenData.hardCap.toLocaleString()} ℏ
+                                    {tokenData.hardCap.toLocaleString("en-US")} ℏ
                                 </span>
                             </div>
                             <div className="progress-bar" style={{ height: 12, borderRadius: 6 }}>
@@ -343,7 +340,7 @@ export default function TokenDetail({
                                         color: "var(--text-dim)",
                                     }}
                                 >
-                                    Soft Cap: {tokenData.softCap.toLocaleString()} ℏ
+                                    Soft Cap: {tokenData.softCap.toLocaleString("en-US")} ℏ
                                 </span>
                             </div>
                         </div>
@@ -368,7 +365,7 @@ export default function TokenDetail({
                                             : "Ended",
                                 },
                                 {
-                                    label: "Token Price",
+                                    label: "Asset Price",
                                     value: `${tokenData.tokenPrice.toFixed(4)} ℏ`,
                                 },
                                 { label: "State", value: ["Active", "Succeeded", "Finalized", "Failed"][tokenData.state] },
@@ -444,8 +441,8 @@ export default function TokenDetail({
                                         ≈{" "}
                                         {(
                                             parseFloat(amount) / tokenData.tokenPrice
-                                        ).toLocaleString(undefined, { maximumFractionDigits: 0 })}{" "}
-                                        {tokenData.symbol} tokens
+                                        ).toLocaleString("en-US", { maximumFractionDigits: 0 })}{" "}
+                                        {tokenData.symbol} assets
                                     </div>
                                 )}
                             </div>
@@ -488,7 +485,7 @@ export default function TokenDetail({
                             className="btn-acid"
                             style={{ width: "100%", padding: "14px" }}
                         >
-                            Claim Tokens
+                            Claim Assets
                         </button>
                     )}
                 </div>

@@ -48,7 +48,7 @@ export default function Hero({ onNavigate }: { onNavigate: (section: string) => 
             opacity: number;
         }> = [];
 
-        const colors = ["#00F0FF", "#FF006E", "#39FF14", "#FFD700"];
+        const colors = ["#555570", "#8888aa"];
 
         const resize = () => {
             canvas.width = window.innerWidth;
@@ -123,7 +123,7 @@ export default function Hero({ onNavigate }: { onNavigate: (section: string) => 
             id="hero"
             style={{
                 position: "relative",
-                minHeight: "100vh",
+                padding: "160px 0 80px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -139,140 +139,126 @@ export default function Hero({ onNavigate }: { onNavigate: (section: string) => 
                 }}
             />
 
-            {/* Gradient orbs */}
-            <div
-                style={{
-                    position: "absolute",
-                    width: 600,
-                    height: 600,
-                    background: "radial-gradient(circle, var(--cyan-glow) 0%, transparent 70%)",
-                    top: "-10%",
-                    right: "-10%",
-                    pointerEvents: "none",
-                    filter: "blur(80px)",
-                }}
-            />
-            <div
-                style={{
-                    position: "absolute",
-                    width: 500,
-                    height: 500,
-                    background: "radial-gradient(circle, var(--magenta-glow) 0%, transparent 70%)",
-                    bottom: "-10%",
-                    left: "-5%",
-                    pointerEvents: "none",
-                    filter: "blur(80px)",
-                }}
-            />
-
             <div
                 style={{
                     position: "relative",
                     zIndex: 10,
                     textAlign: "center",
-                    maxWidth: 900,
+                    maxWidth: 860,
                     padding: "0 24px",
                 }}
             >
-                {/* Badge */}
+                {/* Live badge */}
                 <div
                     style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: 8,
-                        padding: "6px 16px",
+                        gap: 7,
+                        padding: "5px 14px",
                         background: "var(--void-surface)",
                         border: "1px solid var(--void-border)",
                         borderRadius: 20,
-                        marginBottom: 32,
+                        marginBottom: 40,
                         fontFamily: "var(--font-mono)",
-                        fontSize: 12,
-                        color: "var(--cyan)",
-                        letterSpacing: "0.05em",
+                        fontSize: 11,
+                        color: "var(--text-dim)",
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
                     }}
                 >
                     <span
                         style={{
-                            width: 6,
-                            height: 6,
+                            width: 5,
+                            height: 5,
                             borderRadius: "50%",
-                            background: "var(--acid)",
+                            background: "var(--cyan)",
                             display: "inline-block",
-                            animation: "pulse-glow-cyan 2s infinite",
                         }}
                     />
-                    LIVE ON HEDERA
+                    Live on Hedera
                 </div>
 
-                {/* Title */}
+                {/* Main headline */}
                 <h1
                     style={{
                         fontFamily: "var(--font-display)",
-                        fontSize: "clamp(40px, 8vw, 80px)",
                         fontWeight: 800,
-                        lineHeight: 1.05,
-                        marginBottom: 24,
+                        lineHeight: 1.08,
+                        marginBottom: 16,
                         letterSpacing: "-0.03em",
                     }}
                 >
-                    <span style={{ color: "var(--text-primary)" }}>Launch Your </span>
                     <span
                         style={{
-                            background: "linear-gradient(135deg, var(--cyan), var(--acid))",
-                            WebkitBackgroundClip: "text",
-                            WebkitTextFillColor: "transparent",
+                            display: "block",
+                            fontSize: "clamp(44px, 7vw, 80px)",
+                            color: "var(--text-primary)",
                         }}
                     >
-                        Token
+                        Raise Funds For Your
                     </span>
-                    <br />
-                    <span style={{ color: "var(--text-primary)" }}>Into The </span>
                     <span
                         style={{
-                            background: "linear-gradient(135deg, var(--magenta), var(--gold))",
-                            WebkitBackgroundClip: "text",
-                            WebkitTextFillColor: "transparent",
+                            display: "block",
+                            fontSize: "clamp(44px, 7vw, 80px)",
+                            color: "var(--cyan)",
                         }}
                     >
-                        Future
+                        Project or Game
                     </span>
                 </h1>
 
+                {/* Sub-headline — smaller, different weight, muted */}
                 <p
                     style={{
                         fontFamily: "var(--font-body)",
-                        fontSize: "clamp(16px, 2vw, 20px)",
-                        color: "var(--text-secondary)",
-                        maxWidth: 600,
-                        margin: "0 auto 40px",
-                        lineHeight: 1.6,
+                        fontSize: "clamp(13px, 1.4vw, 16px)",
+                        fontWeight: 400,
+                        fontStyle: "italic",
+                        color: "var(--text-dim)",
+                        letterSpacing: "0.02em",
+                        marginBottom: 36,
                     }}
                 >
-                    Fair launch tokens with automatic LP creation, built-in staking rewards,
-                    and transparent fundraising — all on Hedera.
+                    from the Hedera community
+                </p>
+
+                {/* Description */}
+                <p
+                    style={{
+                        fontFamily: "var(--font-body)",
+                        fontSize: "clamp(14px, 1.6vw, 17px)",
+                        color: "var(--text-secondary)",
+                        maxWidth: 560,
+                        margin: "0 auto 48px",
+                        lineHeight: 1.7,
+                    }}
+                >
+                    A launchpad for products and games to fundraise directly with the community —
+                    with automatic LP creation and built-in staking rewards.
                 </p>
 
                 {/* CTA */}
                 <div
                     style={{
                         display: "flex",
-                        gap: 16,
+                        gap: 14,
                         justifyContent: "center",
                         flexWrap: "wrap",
-                        marginBottom: 64,
+                        marginBottom: 72,
                     }}
                 >
                     <button
                         className="btn-primary"
                         onClick={() => onNavigate("create")}
-                        style={{ fontSize: 15, padding: "14px 36px" }}
+                        style={{ fontSize: 14, padding: "13px 32px", letterSpacing: "0.04em" }}
                     >
-                        🚀 Launch Token
+                        Launch Project
                     </button>
                     <button
                         className="btn-secondary"
                         onClick={() => onNavigate("launches")}
-                        style={{ fontSize: 15, padding: "14px 36px" }}
+                        style={{ fontSize: 14, padding: "13px 32px", letterSpacing: "0.04em" }}
                     >
                         Explore Launches
                     </button>
@@ -283,44 +269,30 @@ export default function Hero({ onNavigate }: { onNavigate: (section: string) => 
                     style={{
                         display: "grid",
                         gridTemplateColumns: "repeat(3, 1fr)",
-                        gap: 24,
-                        maxWidth: 600,
+                        gap: 32,
+                        maxWidth: 540,
                         margin: "0 auto",
+                        borderTop: "1px solid var(--void-border)",
+                        paddingTop: 32,
                     }}
                 >
                     <div>
-                        <div className="stat-value">{counts.launches}</div>
+                        <div className="stat-value" style={{ fontSize: 28 }}>{counts.launches}</div>
                         <div className="stat-label">Launches</div>
                     </div>
                     <div>
-                        <div className="stat-value">
-                            {counts.raised.toLocaleString()}
-                            <span style={{ fontSize: 16, opacity: 0.6, marginLeft: 4 }}>
-                                ℏ
-                            </span>
+                        <div className="stat-value" style={{ fontSize: 28 }}>
+                            {counts.raised.toLocaleString("en-US")}
+                            <span style={{ fontSize: 14, opacity: 0.5, marginLeft: 3 }}>ℏ</span>
                         </div>
                         <div className="stat-label">HBAR Raised</div>
                     </div>
                     <div>
-                        <div className="stat-value">{counts.stakers.toLocaleString()}</div>
+                        <div className="stat-value" style={{ fontSize: 28 }}>{counts.stakers.toLocaleString("en-US")}</div>
                         <div className="stat-label">Stakers</div>
                     </div>
                 </div>
             </div>
-
-            {/* Scan line effect */}
-            <div
-                style={{
-                    position: "absolute",
-                    left: 0,
-                    right: 0,
-                    height: 1,
-                    background: "linear-gradient(90deg, transparent, var(--cyan), transparent)",
-                    opacity: 0.15,
-                    animation: "scan-line 4s linear infinite",
-                    pointerEvents: "none",
-                }}
-            />
         </section>
     );
 }

@@ -12,16 +12,16 @@
   /* Accent colors */
   --cyan: #00F0FF;
   --cyan-dim: #00a0aa;
-  --cyan-glow: rgba(0, 240, 255, 0.15);
+  --cyan-glow: transparent;
   --magenta: #FF006E;
   --magenta-dim: #aa0049;
-  --magenta-glow: rgba(255, 0, 110, 0.15);
+  --magenta-glow: transparent;
   --acid: #39FF14;
   --acid-dim: #28b30e;
-  --acid-glow: rgba(57, 255, 20, 0.15);
+  --acid-glow: transparent;
   --gold: #FFD700;
   --gold-dim: #b39600;
-  --gold-glow: rgba(255, 215, 0, 0.15);
+  --gold-glow: transparent;
 
   /* Text */
   --text-primary: #e8e8f0;
@@ -89,11 +89,11 @@ body {
 
   0%,
   100% {
-    box-shadow: 0 0 20px var(--cyan-glow), 0 0 40px transparent;
+    box-shadow: none;
   }
 
   50% {
-    box-shadow: 0 0 30px var(--cyan-glow), 0 0 60px var(--cyan-glow);
+    box-shadow: none;
   }
 }
 
@@ -101,11 +101,11 @@ body {
 
   0%,
   100% {
-    box-shadow: 0 0 20px var(--magenta-glow), 0 0 40px transparent;
+    box-shadow: none;
   }
 
   50% {
-    box-shadow: 0 0 30px var(--magenta-glow), 0 0 60px var(--magenta-glow);
+    box-shadow: none;
   }
 }
 
@@ -250,7 +250,7 @@ body {
 
 .glass-card:hover {
   border-color: var(--cyan-dim);
-  box-shadow: 0 8px 32px var(--cyan-glow), inset 0 1px 0 rgba(0, 240, 255, 0.1);
+  box-shadow: none;
   transform: translateY(-2px);
 }
 
@@ -259,7 +259,7 @@ body {
    ═══════════════════════════════════════════ */
 .btn-primary {
   position: relative;
-  background: linear-gradient(135deg, var(--cyan), var(--cyan-dim));
+  background: var(--cyan);
   color: var(--void);
   font-family: var(--font-display);
   font-weight: 700;
@@ -277,7 +277,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background: transparent;
   transform: translateX(-100%);
   transition: transform 0.5s;
 }
@@ -287,7 +287,7 @@ body {
 }
 
 .btn-primary:hover {
-  box-shadow: 0 0 30px var(--cyan-glow), 0 0 60px var(--cyan-glow);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
@@ -308,11 +308,11 @@ body {
 .btn-secondary:hover {
   background: var(--cyan-glow);
   border-color: var(--cyan);
-  box-shadow: 0 0 20px var(--cyan-glow);
+
 }
 
 .btn-magenta {
-  background: linear-gradient(135deg, var(--magenta), var(--magenta-dim));
+  background: var(--magenta);
   color: white;
   font-family: var(--font-display);
   font-weight: 700;
@@ -326,12 +326,12 @@ body {
 }
 
 .btn-magenta:hover {
-  box-shadow: 0 0 30px var(--magenta-glow), 0 0 60px var(--magenta-glow);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
 .btn-acid {
-  background: linear-gradient(135deg, var(--acid), var(--acid-dim));
+  background: var(--acid);
   color: var(--void);
   font-family: var(--font-display);
   font-weight: 700;
@@ -345,7 +345,7 @@ body {
 }
 
 .btn-acid:hover {
-  box-shadow: 0 0 30px var(--acid-glow), 0 0 60px var(--acid-glow);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
@@ -367,7 +367,7 @@ body {
 
 .input-field:focus {
   border-color: var(--cyan);
-  box-shadow: 0 0 0 3px var(--cyan-glow);
+
 }
 
 .input-field::placeholder {
@@ -389,7 +389,7 @@ body {
 .progress-fill {
   height: 100%;
   border-radius: 4px;
-  background: linear-gradient(90deg, var(--cyan), var(--acid));
+  background: var(--cyan);
   transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
 }
@@ -398,7 +398,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  background: transparent;
   animation: shimmer 2s infinite;
   background-size: 200% 100%;
 }
@@ -435,7 +435,7 @@ body {
 .tab-item.active {
   background: var(--cyan);
   color: var(--void);
-  box-shadow: 0 0 20px var(--cyan-glow);
+
 }
 
 .tab-item:not(.active):hover {

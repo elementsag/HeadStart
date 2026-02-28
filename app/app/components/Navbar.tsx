@@ -57,7 +57,7 @@ export default function Navbar({
                         style={{
                             width: 36,
                             height: 36,
-                            background: "linear-gradient(135deg, var(--cyan), var(--magenta))",
+                            background: "var(--cyan)",
                             borderRadius: 8,
                             display: "flex",
                             alignItems: "center",

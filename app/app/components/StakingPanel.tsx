@@ -88,7 +88,7 @@ export default function StakingPanel() {
                         fontSize: 14,
                     }}
                 >
-                    Stake launched tokens to earn rewards over time.
+                    Stake launched assets to earn rewards over time.
                 </p>
             </div>
 
@@ -123,8 +123,7 @@ export default function StakingPanel() {
                                     width: 32,
                                     height: 32,
                                     borderRadius: 8,
-                                    background: `linear-gradient(135deg, ${["var(--cyan)", "var(--magenta)", "var(--acid)"][i % 3]
-                                        }, var(--void-elevated))`,
+                                    background: "var(--cyan)",
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
@@ -195,7 +194,7 @@ export default function StakingPanel() {
                                 },
                                 {
                                     label: "Stakers",
-                                    value: pool.totalStakers.toLocaleString(),
+                                    value: pool.totalStakers.toLocaleString("en-US"),
                                     color: "var(--text-primary)",
                                 },
                                 {
@@ -257,7 +256,7 @@ export default function StakingPanel() {
                                 left: 0,
                                 right: 0,
                                 height: 2,
-                                background: "linear-gradient(90deg, var(--magenta), var(--gold))",
+                                background: "var(--cyan)",
                             }}
                         />
                         <h3
@@ -303,7 +302,7 @@ export default function StakingPanel() {
                                         color: "var(--cyan)",
                                     }}
                                 >
-                                    {pool.userStaked.toLocaleString()} {pool.tokenSymbol}
+                                    {pool.userStaked.toLocaleString("en-US")} {pool.tokenSymbol}
                                 </span>
                             </div>
 
@@ -335,7 +334,7 @@ export default function StakingPanel() {
                                         color: "var(--acid)",
                                     }}
                                 >
-                                    {pool.userEarned.toLocaleString()} {pool.tokenSymbol}
+                                    {pool.userEarned.toLocaleString("en-US")} {pool.tokenSymbol}
                                 </span>
                             </div>
 
@@ -367,13 +366,13 @@ export default function StakingPanel() {
                                         color: "var(--text-primary)",
                                     }}
                                 >
-                                    {pool.tokenBalance.toLocaleString()} {pool.tokenSymbol}
+                                    {pool.tokenBalance.toLocaleString("en-US")} {pool.tokenSymbol}
                                 </span>
                             </div>
 
                             {pool.userEarned > 0 && (
                                 <button className="btn-acid" style={{ width: "100%" }}>
-                                    Claim {pool.userEarned.toLocaleString()} {pool.tokenSymbol}
+                                    Claim {pool.userEarned.toLocaleString("en-US")} {pool.tokenSymbol}
                                 </button>
                             )}
                         </div>
@@ -471,8 +470,8 @@ export default function StakingPanel() {
                                 >
                                     Available:{" "}
                                     {action === "stake"
-                                        ? pool.tokenBalance.toLocaleString()
-                                        : pool.userStaked.toLocaleString()}{" "}
+                                        ? pool.tokenBalance.toLocaleString("en-US")
+                                        : pool.userStaked.toLocaleString("en-US")}{" "}
                                     {pool.tokenSymbol}
                                 </span>
                             </div>
@@ -534,7 +533,7 @@ export default function StakingPanel() {
                                 className={action === "stake" ? "btn-primary" : "btn-magenta"}
                                 style={{ width: "100%", fontSize: 14, padding: "14px" }}
                             >
-                                {action === "stake" ? "📥 Stake Tokens" : "📤 Unstake Tokens"}
+                                {action === "stake" ? "📥 Stake Assets" : "📤 Unstake Assets"}
                             </button>
                         )}
                     </div>

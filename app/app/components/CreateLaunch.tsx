@@ -70,9 +70,7 @@ export default function CreateLaunch() {
                         fontSize: 32,
                         fontWeight: 800,
                         marginBottom: 16,
-                        background: "linear-gradient(135deg, var(--cyan), var(--acid))",
-                        WebkitBackgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
+                        color: "var(--cyan)",
                     }}
                 >
                     Launch Created!
@@ -124,7 +122,7 @@ export default function CreateLaunch() {
                         color: "var(--text-primary)",
                     }}
                 >
-                    Create Token Launch
+                    Create Project Launch
                 </h2>
                 <p
                     style={{
@@ -133,7 +131,7 @@ export default function CreateLaunch() {
                         fontSize: 14,
                     }}
                 >
-                    Deploy your token with automatic LP and staking — all in one transaction.
+                    Deploy your project with automatic LP and staking — all in one transaction.
                 </p>
             </div>
 
@@ -160,7 +158,7 @@ export default function CreateLaunch() {
                                 letterSpacing: "0.05em",
                             }}
                         >
-                            Token Info
+                            Project Info
                         </h3>
                         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                             <div>
@@ -175,7 +173,7 @@ export default function CreateLaunch() {
                                         letterSpacing: "0.08em",
                                     }}
                                 >
-                                    Token Name
+                                    Project Name
                                 </label>
                                 <input
                                     className="input-field"
@@ -460,7 +458,7 @@ export default function CreateLaunch() {
                                 left: 0,
                                 right: 0,
                                 height: 3,
-                                background: "linear-gradient(90deg, var(--cyan), var(--magenta), var(--acid))",
+                                background: "var(--cyan)",
                             }}
                         />
                         <h3
@@ -495,7 +493,7 @@ export default function CreateLaunch() {
                                     width: 56,
                                     height: 56,
                                     borderRadius: 14,
-                                    background: "linear-gradient(135deg, var(--cyan), var(--magenta))",
+                                    background: "var(--cyan)",
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
@@ -517,7 +515,7 @@ export default function CreateLaunch() {
                                         color: "var(--text-primary)",
                                     }}
                                 >
-                                    {formData.name || "Token Name"}
+                                    {formData.name || "Project Name"}
                                 </div>
                                 <div
                                     style={{
@@ -543,12 +541,12 @@ export default function CreateLaunch() {
                             {[
                                 {
                                     label: "Hard Cap",
-                                    value: `${Number(formData.hardCap).toLocaleString()} ℏ`,
+                                    value: `${Number(formData.hardCap).toLocaleString("en-US")} ℏ`,
                                     color: "var(--cyan)",
                                 },
                                 {
                                     label: "Soft Cap",
-                                    value: `${Number(formData.softCap).toLocaleString()} ℏ`,
+                                    value: `${Number(formData.softCap).toLocaleString("en-US")} ℏ`,
                                     color: "var(--text-primary)",
                                 },
                                 {
@@ -557,7 +555,7 @@ export default function CreateLaunch() {
                                     color: "var(--text-primary)",
                                 },
                                 {
-                                    label: "Token Price",
+                                    label: "Asset Price",
                                     value: supply > 0 && saleAlloc > 0
                                         ? `${(parseFloat(formData.hardCap) / saleAlloc).toFixed(6)} ℏ`
                                         : "—",
@@ -613,7 +611,7 @@ export default function CreateLaunch() {
                                 letterSpacing: "0.05em",
                             }}
                         >
-                            Token Distribution
+                            Asset Distribution
                         </h3>
 
                         {/* Bar chart */}
@@ -682,7 +680,7 @@ export default function CreateLaunch() {
                                                 color: "var(--text-dim)",
                                             }}
                                         >
-                                            {a.value.toLocaleString()}
+                                            {a.value.toLocaleString("en-US")}
                                         </span>
                                         <span
                                             style={{
@@ -731,7 +729,7 @@ export default function CreateLaunch() {
                                 opacity: !formData.name || !formData.symbol ? 0.4 : 1,
                             }}
                         >
-                            {isDeploying ? "⏳ Deploying..." : `🚀 Deploy ${formData.symbol || "Token"}`}
+                            {isDeploying ? "⏳ Deploying..." : `🚀 Deploy ${formData.symbol || "Project"}`}
                         </button>
                     )}
                 </div>
