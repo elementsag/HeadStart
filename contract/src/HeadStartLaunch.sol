@@ -23,10 +23,12 @@ interface IDEXRouter {
     ) external payable returns (uint amountToken, uint amountETH, uint liquidity);
 
     function factory() external pure returns (address);
+    function WETH() external pure returns (address);
 }
 
 interface IDEXFactory {
     function createPair(address tokenA, address tokenB) external returns (address pair);
+    function getPair(address tokenA, address tokenB) external view returns (address pair);
 }
 
 interface IWETH {
@@ -103,8 +105,9 @@ contract HeadStartLaunch {
     bool public isGame;
     string public gameUri;
 
-    // Claim tracking
+    // Claim & Withdraw tracking
     mapping(address => bool) public hasClaimed;
+    uint256 public pendingCreatorHbar;
 
     // ═══════════════════════════════════════════════════════════════
     //                          EVENTS
@@ -172,7 +175,7 @@ contract HeadStartLaunch {
 
         // Calculate token allocations
         tokensForStaking = (_totalSupply * _stakingRewardPercent) / 10000;
-        tokensForLP = (_totalSupply * 2000) / 10000; // 20% for LP
+        tokensForLP = (_totalSupply * _lpPercent) / 10000; // Match HBAR LP percentage
         tokensForCreator = (_totalSupply * 500) / 10000; // 5% for creator
         tokensForSale = _totalSupply - tokensForStaking - tokensForLP - tokensForCreator;
 
@@ -255,20 +258,38 @@ contract HeadStartLaunch {
                 0, // accept any amount of HBAR
                 address(this), // LP tokens stay in contract (locked)
                 block.timestamp + 300
-            ) returns (uint256, uint256, uint256) {
+            ) returns (uint256 amountToken, uint256 amountETH, uint256 /* liquidity */) {
                 // LP created successfully
+                // Address [H-2]: Refund unspent HBAR and Tokens to creator
+                if (hbarForLP > amountETH) {
+                    hbarForCreator += (hbarForLP - amountETH);
+                }
+                if (tokensForLP > amountToken) {
+                    tokensForCreator += (tokensForLP - amountToken);
+                }
+                
+                // Address [M-1]: Retrieve LP pair
+                lpPair = IDEXFactory(IDEXRouter(dexRouter).factory()).getPair(
+                    address(token), 
+                    IDEXRouter(dexRouter).WETH()
+                );
             } catch {
-                // If LP creation fails, send HBAR to creator instead
+                // Address [H-1]: If LP creation fails, send HBAR and tokens to creator instead
                 hbarForCreator += hbarForLP;
+                tokensForCreator += tokensForLP;
             }
         } else {
             hbarForCreator += hbarForLP;
+            tokensForCreator += tokensForLP;
         }
 
         // Send remaining HBAR to creator
         if (hbarForCreator > 0) {
             (bool sent, ) = payable(creator).call{value: hbarForCreator}("");
-            require(sent, "HeadStartLaunch: creator transfer failed");
+            // Address [H-3]: Don't revert if creator transfer fails, store it for pulling
+            if (!sent) {
+                pendingCreatorHbar += hbarForCreator;
+            }
         }
 
         // Fund staking contract
@@ -324,6 +345,19 @@ contract HeadStartLaunch {
         emit RefundClaimed(msg.sender, amount);
     }
 
+    /**
+     * @notice Allow creator to withdraw pending HBAR if original transfer failed (Pull pattern)
+     */
+    function withdrawPendingHbar() external onlyCreator {
+        uint256 amount = pendingCreatorHbar;
+        require(amount > 0, "HeadStartLaunch: no pending HBAR");
+
+        pendingCreatorHbar = 0;
+
+        (bool sent, ) = payable(msg.sender).call{value: amount}("");
+        require(sent, "HeadStartLaunch: withdrawal failed");
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //                      CANCEL
     // ═══════════════════════════════════════════════════════════════
@@ -356,7 +390,7 @@ contract HeadStartLaunch {
 
     function getTokenPrice() external view returns (uint256) {
         if (tokensForSale == 0) return 0;
-        return (hardCap * 1e18) / tokensForSale;
+        return (totalRaised > 0 ? (totalRaised * 1e18) / tokensForSale : (hardCap * 1e18) / tokensForSale);
     }
 
     function getContributors() external view returns (address[] memory) {

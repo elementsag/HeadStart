@@ -63,6 +63,12 @@ contract HeadStartStaking {
     }
 
     modifier updateReward(address _account) {
+        if (totalStaked == 0 && stakingEnd == 0 && initialized) {
+            // Address [L-1]: Delay staking start until first stake
+            lastUpdateTime = block.timestamp;
+            stakingEnd = block.timestamp + stakingDuration;
+        }
+
         rewardPerTokenStored = rewardPerToken();
         lastUpdateTime = lastTimeRewardApplicable();
         if (_account != address(0)) {
@@ -101,8 +107,6 @@ contract HeadStartStaking {
         stakingToken = IERC20(_token);
         totalRewards = _totalRewards;
         rewardRate = _totalRewards / stakingDuration;
-        lastUpdateTime = block.timestamp;
-        stakingEnd = block.timestamp + stakingDuration;
         initialized = true;
 
         // Pull reward tokens from the launch contract
