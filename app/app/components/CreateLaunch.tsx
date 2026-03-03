@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useState, useEffect } from "react";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from "wagmi";
+import { hederaTestnet } from "wagmi/chains";
+import { ConnectWalletInline } from "./ConnectWallet";
+import { parseEther } from "viem";
+import { CONTRACTS, FACTORY_ABI } from "../lib/contracts";
 
 export default function CreateLaunch() {
-    const { isConnected } = useAccount();
+    const { isConnected, chainId } = useAccount();
+    const { switchChain } = useSwitchChain();
     const [formData, setFormData] = useState({
         name: "",
         symbol: "",
@@ -17,23 +21,69 @@ export default function CreateLaunch() {
         stakingRewardPercent: "15",
         stakingDuration: "90",
     });
-    const [isDeploying, setIsDeploying] = useState(false);
 
-    // Steps: 1=Identity, 2=Fundraise, 3=Tokenomics, 4=Preview, 5=Success
     const [step, setStep] = useState(1);
+    const [deployError, setDeployError] = useState<string | null>(null);
 
     const updateField = (field: string, value: string) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
-    const handleDeploy = async () => {
-        if (!isConnected) return;
-        setIsDeploying(true);
-        // Simulation
-        setTimeout(() => {
+    const { writeContract, data: hash, isPending: isWritePending, error: writeError } = useWriteContract();
+    const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+
+    const isDeploying = isWritePending || isConfirming;
+    const isWrongChain = chainId !== hederaTestnet.id;
+
+    useEffect(() => {
+        if (isConfirmed) {
             setStep(5);
-            setIsDeploying(false);
-        }, 3000);
+        }
+    }, [isConfirmed]);
+
+    useEffect(() => {
+        if (writeError) {
+            console.error("Write contract error:", writeError);
+            setDeployError(writeError.message?.slice(0, 200) || "Transaction failed");
+        }
+    }, [writeError]);
+
+    const handleDeploy = () => {
+        if (!isConnected) return;
+        setDeployError(null);
+
+        if (isWrongChain) {
+            switchChain({ chainId: hederaTestnet.id });
+            return;
+        }
+
+        console.log("Deploying with args:", {
+            factory: CONTRACTS.FACTORY,
+            name: formData.name,
+            symbol: formData.symbol,
+            totalSupply: formData.totalSupply,
+            hardCap: formData.hardCap,
+            softCap: formData.softCap,
+        });
+
+        writeContract({
+            address: CONTRACTS.FACTORY as `0x${string}`,
+            abi: FACTORY_ABI,
+            functionName: "createLaunch",
+            args: [
+                formData.name,
+                formData.symbol,
+                parseEther(formData.totalSupply || "0"),
+                parseEther(formData.hardCap || "0"),
+                parseEther(formData.softCap || "0"),
+                BigInt(Math.floor(parseFloat(formData.duration || "0") * 86400)),
+                BigInt(Math.floor(parseFloat(formData.lpPercent || "0") * 100)),
+                BigInt(Math.floor(parseFloat(formData.stakingRewardPercent || "0") * 100)),
+                BigInt(Math.floor(parseFloat(formData.stakingDuration || "0") * 86400)),
+                false, // isGame
+                ""     // gameUri
+            ]
+        });
     };
 
     // Calculations
@@ -50,7 +100,7 @@ export default function CreateLaunch() {
                     width: 32, height: 4, borderRadius: 2,
                     background: step === s ? "var(--cyan)" : step > s ? "var(--text-primary)" : "var(--void-border)",
                     transition: "all 0.3s ease",
-                    boxShadow: step === s ? "0 0 10px rgba(0,240,255,0.4)" : "none"
+                    boxShadow: step === s ? "0 0 10px rgba(74,178,196,0.4)" : "none"
                 }} />
             ))}
         </div>
@@ -180,11 +230,17 @@ export default function CreateLaunch() {
                         </div>
 
                         {!isConnected ? (
-                            <ConnectButton.Custom>
-                                {({ openConnectModal }: any) => (
-                                    <button className="btn-primary" onClick={openConnectModal} style={{ width: "100%", padding: 16 }}>Connect Wallet to Deploy</button>
-                                )}
-                            </ConnectButton.Custom>
+                            <ConnectWalletInline label="Connect Wallet to Deploy" />
+                        ) : isWrongChain ? (
+                            <button
+                                className="btn-magenta"
+                                onClick={() => switchChain({ chainId: hederaTestnet.id })}
+                                style={{
+                                    width: "100%", padding: "16px", fontSize: 16,
+                                }}
+                            >
+                                ⚠️ Switch to Hedera Testnet
+                            </button>
                         ) : (
                             <button
                                 className="btn-primary"
@@ -193,11 +249,25 @@ export default function CreateLaunch() {
                                 style={{
                                     width: "100%", padding: "16px", fontSize: 16,
                                     background: "var(--cyan)", color: "var(--void)",
-                                    boxShadow: "0 0 20px rgba(0,240,255,0.3)"
+                                    boxShadow: "0 0 20px rgba(74,178,196,0.3)"
                                 }}
                             >
                                 {isDeploying ? "⏳ Deploying Project..." : `🚀 Deploy ${formData.symbol}`}
                             </button>
+                        )}
+
+                        {deployError && (
+                            <div style={{
+                                marginTop: 12, padding: "12px 16px",
+                                background: "rgba(193, 85, 126, 0.08)",
+                                border: "1px solid rgba(193, 85, 126, 0.2)",
+                                borderRadius: 12,
+                                fontFamily: "var(--font-mono)", fontSize: 12,
+                                color: "var(--magenta)", fontWeight: 600,
+                                lineHeight: 1.5, wordBreak: "break-word"
+                            }}>
+                                ❌ {deployError}
+                            </div>
                         )}
                     </div>
                 )}

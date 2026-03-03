@@ -89,6 +89,11 @@ contract HeadStartLaunch {
     address public stakingContract;
     address public dexRouter;
     address public lpPair;
+    uint256 public lpUnlockTime;
+    uint256 public constant LP_LOCK_DURATION = 180 days;
+
+    // Reentrancy guard
+    bool private _locked;
 
     // Contributions
     mapping(address => uint256) public contributions;
@@ -119,6 +124,7 @@ contract HeadStartLaunch {
     event RefundClaimed(address indexed claimer, uint256 amount);
     event LaunchCancelled();
     event StateChanged(LaunchState oldState, LaunchState newState);
+    event LPCreationFailed(string reason);
 
     // ═══════════════════════════════════════════════════════════════
     //                        MODIFIERS
@@ -132,6 +138,13 @@ contract HeadStartLaunch {
     modifier inState(LaunchState _state) {
         require(state == _state, "HeadStartLaunch: invalid state");
         _;
+    }
+
+    modifier nonReentrant() {
+        require(!_locked, "HeadStartLaunch: reentrant call");
+        _locked = true;
+        _;
+        _locked = false;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -231,11 +244,22 @@ contract HeadStartLaunch {
 
     /**
      * @notice Finalize the launch - create LP, fund staking, distribute tokens
+     * @dev Anyone can call once SUCCEEDED to ensure launch completes even if creator is inactive.
+     *      Distribution is deterministic based on contract parameters.
      */
-    function finalize() external inState(LaunchState.SUCCEEDED) {
-        // Platform fee
+    function finalize() external nonReentrant inState(LaunchState.SUCCEEDED) {
+        // Track actual LP amounts for accurate event emission
+        uint256 actualLPHbar = 0;
+        uint256 actualLPTokens = 0;
+
+        // LP HBAR from total raised (before fee) so LP price is consistent
+        uint256 hbarForLP = (totalRaised * lpPercent) / 10000;
+
+        // Platform fee from total raised
         uint256 platformFee = (totalRaised * platformFeeBps) / 10000;
-        uint256 remaining = totalRaised - platformFee;
+
+        // Creator gets the rest
+        uint256 hbarForCreator = totalRaised - hbarForLP - platformFee;
 
         // Send platform fee
         if (platformFee > 0) {
@@ -243,38 +267,43 @@ contract HeadStartLaunch {
             require(feeSent, "HeadStartLaunch: fee transfer failed");
         }
 
-        // LP allocation
-        uint256 hbarForLP = (remaining * lpPercent) / 10000;
-        uint256 hbarForCreator = remaining - hbarForLP;
-
         // Create LP on DEX
         if (hbarForLP > 0 && dexRouter != address(0)) {
             IERC20(address(token)).approve(dexRouter, tokensForLP);
-            
+
+            // 95% slippage protection
+            uint256 amountTokenMin = (tokensForLP * 95) / 100;
+            uint256 amountETHMin = (hbarForLP * 95) / 100;
+
             try IDEXRouter(dexRouter).addLiquidityETH{value: hbarForLP}(
                 address(token),
                 tokensForLP,
-                0, // accept any amount of tokens
-                0, // accept any amount of HBAR
-                address(this), // LP tokens stay in contract (locked)
+                amountTokenMin,
+                amountETHMin,
+                address(this), // LP tokens stay in contract (time-locked)
                 block.timestamp + 300
             ) returns (uint256 amountToken, uint256 amountETH, uint256 /* liquidity */) {
-                // LP created successfully
-                // Address [H-2]: Refund unspent HBAR and Tokens to creator
+                actualLPHbar = amountETH;
+                actualLPTokens = amountToken;
+
+                // Refund unspent HBAR and Tokens to creator
                 if (hbarForLP > amountETH) {
                     hbarForCreator += (hbarForLP - amountETH);
                 }
                 if (tokensForLP > amountToken) {
                     tokensForCreator += (tokensForLP - amountToken);
                 }
-                
-                // Address [M-1]: Retrieve LP pair
+
+                // Retrieve LP pair address
                 lpPair = IDEXFactory(IDEXRouter(dexRouter).factory()).getPair(
-                    address(token), 
+                    address(token),
                     IDEXRouter(dexRouter).WETH()
                 );
+
+                // Lock LP tokens for LP_LOCK_DURATION
+                lpUnlockTime = block.timestamp + LP_LOCK_DURATION;
             } catch {
-                // Address [H-1]: If LP creation fails, send HBAR and tokens to creator instead
+                emit LPCreationFailed("DEX addLiquidityETH reverted");
                 hbarForCreator += hbarForLP;
                 tokensForCreator += tokensForLP;
             }
@@ -286,7 +315,6 @@ contract HeadStartLaunch {
         // Send remaining HBAR to creator
         if (hbarForCreator > 0) {
             (bool sent, ) = payable(creator).call{value: hbarForCreator}("");
-            // Address [H-3]: Don't revert if creator transfer fails, store it for pulling
             if (!sent) {
                 pendingCreatorHbar += hbarForCreator;
             }
@@ -308,7 +336,7 @@ contract HeadStartLaunch {
 
         _changeState(LaunchState.FINALIZED);
 
-        emit LaunchFinalized(lpPair, hbarForLP, tokensForLP);
+        emit LaunchFinalized(lpPair, actualLPHbar, actualLPTokens);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -331,9 +359,13 @@ contract HeadStartLaunch {
     }
 
     /**
-     * @notice Claim refund if launch failed
+     * @notice Claim refund if launch failed or was cancelled
      */
-    function claimRefund() external inState(LaunchState.FAILED) {
+    function claimRefund() external {
+        require(
+            state == LaunchState.FAILED || state == LaunchState.CANCELLED,
+            "HeadStartLaunch: not failed or cancelled"
+        );
         uint256 amount = contributions[msg.sender];
         require(amount > 0, "HeadStartLaunch: no contribution");
 
@@ -358,6 +390,20 @@ contract HeadStartLaunch {
         require(sent, "HeadStartLaunch: withdrawal failed");
     }
 
+    /**
+     * @notice Withdraw LP tokens after the lock period expires
+     * @dev Creator can retrieve LP tokens once LP_LOCK_DURATION has passed
+     */
+    function withdrawLP() external onlyCreator {
+        require(lpPair != address(0), "HeadStartLaunch: no LP pair");
+        require(block.timestamp >= lpUnlockTime, "HeadStartLaunch: LP still locked");
+
+        uint256 lpBalance = IERC20(lpPair).balanceOf(address(this));
+        require(lpBalance > 0, "HeadStartLaunch: no LP tokens");
+
+        IERC20(lpPair).transfer(creator, lpBalance);
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //                      CANCEL
     // ═══════════════════════════════════════════════════════════════
@@ -366,7 +412,7 @@ contract HeadStartLaunch {
      * @notice Creator can cancel the launch before finalization
      */
     function cancel() external onlyCreator inState(LaunchState.ACTIVE) {
-        _changeState(LaunchState.FAILED);
+        _changeState(LaunchState.CANCELLED);
         emit LaunchCancelled();
     }
 

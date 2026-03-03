@@ -10,17 +10,17 @@
   --void-border: #1a1a40;
 
   /* Accent colors */
-  --cyan: #00F0FF;
-  --cyan-dim: #00a0aa;
+  --cyan: #4AB2C4;
+  --cyan-dim: #2D6B75;
   --cyan-glow: transparent;
-  --magenta: #FF006E;
-  --magenta-dim: #aa0049;
+  --magenta: #C1557E;
+  --magenta-dim: #79344E;
   --magenta-glow: transparent;
-  --acid: #39FF14;
-  --acid-dim: #28b30e;
+  --acid: #6AA86A;
+  --acid-dim: #416B41;
   --acid-glow: transparent;
-  --gold: #FFD700;
-  --gold-dim: #b39600;
+  --gold: #C2A753;
+  --gold-dim: #786733;
   --gold-glow: transparent;
 
   /* Text */
@@ -219,8 +219,8 @@ body {
    ═══════════════════════════════════════════ */
 .grid-bg {
   background-image:
-    linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(74, 178, 196, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 178, 196, 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
@@ -234,7 +234,7 @@ body {
   opacity: 0.015;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   pointer-events: none;
-  z-index: 9999;
+  z-index: 1;
 }
 
 /* ═══════════════════════════════════════════
@@ -567,4 +567,28 @@ body {
   .stat-value {
     font-size: 22px;
   }
+}
+
+/* ═══════════════════════════════════════════
+   WALLETCONNECT MODAL OVERRIDES
+   ═══════════════════════════════════════════ */
+wcm-modal,
+w3m-modal,
+#walletconnect-wrapper {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+}
+
+#walletconnect-wrapper>div {
+  margin: auto !important;
+  position: relative !important;
+  z-index: 100000 !important;
 }

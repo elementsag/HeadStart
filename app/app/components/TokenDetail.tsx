@@ -1,25 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import type { LaunchCardData } from "./LaunchCard";
+import { useState, useEffect } from "react";
 import TokenChart from "./TokenChart";
 import GameEmbed from "./GameEmbed";
-import { useAccount } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContracts } from "wagmi";
+import { ConnectWalletInline } from "./ConnectWallet";
+import { parseEther, formatEther } from "viem";
+import { LAUNCH_ABI } from "../lib/contracts";
+import type { LiveLaunchData } from "../lib/hooks";
 
 const STATE_INFO: Record<number, { label: string; color: string; bg: string }> = {
-    0: { label: "Live", color: "var(--acid)", bg: "rgba(57,255,20,0.08)" },
+    0: { label: "Live", color: "var(--acid)", bg: "rgba(106,168,106,0.08)" },
     1: { label: "Succeeded", color: "var(--gold)", bg: "rgba(255,215,0,0.08)" },
-    2: { label: "Finalized", color: "var(--cyan)", bg: "rgba(0,240,255,0.08)" },
-    3: { label: "Failed", color: "var(--magenta)", bg: "rgba(255,0,110,0.08)" },
+    2: { label: "Finalized", color: "var(--cyan)", bg: "rgba(74,178,196,0.08)" },
+    3: { label: "Failed", color: "var(--magenta)", bg: "rgba(193,85,126,0.08)" },
+    4: { label: "Cancelled", color: "var(--text-dim)", bg: "rgba(255,255,255,0.05)" },
 };
-
-const ALLOCATION = [
-    { label: "Sale", percent: 60, color: "var(--cyan)" },
-    { label: "Liquidity", percent: 20, color: "var(--acid)" },
-    { label: "Staking", percent: 15, color: "var(--magenta)" },
-    { label: "Creator", percent: 5, color: "var(--gold)" },
-];
 
 function formatNum(n: number): string {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -28,26 +24,155 @@ function formatNum(n: number): string {
 }
 
 export default function TokenDetail({
-    tokenData,
+    launch,
     onBack,
 }: {
-    tokenData: LaunchCardData;
+    launch: LiveLaunchData;
     onBack: () => void;
 }) {
-    const { isConnected } = useAccount();
+    const { isConnected, address: userAddress } = useAccount();
     const [amount, setAmount] = useState("");
     const [activeTab, setActiveTab] = useState<"chart" | "game">("chart");
+    const [txStatus, setTxStatus] = useState<string | null>(null);
 
-    const progress = tokenData.hardCap > 0
-        ? Math.min((tokenData.totalRaised / tokenData.hardCap) * 100, 100)
+    const addr = launch.launchContract as `0x${string}`;
+
+    // ── Read user-specific data from chain ──
+    const launchAbi = LAUNCH_ABI as any;
+    const userCalls = userAddress
+        ? [
+            { address: addr, abi: launchAbi, functionName: "contributions" as const, args: [userAddress] },
+            { address: addr, abi: launchAbi, functionName: "hasClaimed" as const, args: [userAddress] },
+            { address: addr, abi: launchAbi, functionName: "totalRaised" as const },
+            { address: addr, abi: launchAbi, functionName: "state" as const },
+            { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
+        ]
+        : [
+            { address: addr, abi: launchAbi, functionName: "totalRaised" as const },
+            { address: addr, abi: launchAbi, functionName: "state" as const },
+            { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
+        ];
+
+    const { data: userData, refetch: refetchUser } = useReadContracts({
+        contracts: userCalls,
+        query: { enabled: true, refetchInterval: 10_000 },
+    });
+
+    // Extract live values
+    let liveRaised = launch.totalRaised;
+    let liveState = launch.state;
+    let liveTimeRemaining = launch.timeRemaining;
+    let userContribution = 0;
+    let userClaimed = false;
+
+    if (userData && userAddress) {
+        const getVal = (idx: number) => {
+            const d = userData[idx];
+            return d && d.status === "success" ? d.result : undefined;
+        };
+        userContribution = parseFloat(formatEther((getVal(0) as bigint) || 0n));
+        userClaimed = (getVal(1) as boolean) || false;
+        liveRaised = parseFloat(formatEther((getVal(2) as bigint) || 0n));
+        liveState = Number((getVal(3) as bigint) || 0n);
+        liveTimeRemaining = Number((getVal(4) as bigint) || 0n);
+    } else if (userData && !userAddress) {
+        const getVal = (idx: number) => {
+            const d = userData[idx];
+            return d && d.status === "success" ? d.result : undefined;
+        };
+        liveRaised = parseFloat(formatEther((getVal(0) as bigint) || 0n));
+        liveState = Number((getVal(1) as bigint) || 0n);
+        liveTimeRemaining = Number((getVal(2) as bigint) || 0n);
+    }
+
+    const progress = launch.hardCap > 0
+        ? Math.min((liveRaised / launch.hardCap) * 100, 100)
         : 0;
 
-    const stateInfo = STATE_INFO[tokenData.state] || STATE_INFO[0];
-    const isLive = tokenData.state === 0;
-    const isFinalized = tokenData.state === 2;
-    const estimatedTokens = amount && parseFloat(amount) > 0
-        ? Math.floor(parseFloat(amount) / tokenData.tokenPrice)
+    const stateInfo = STATE_INFO[liveState] || STATE_INFO[0];
+    const isLive = liveState === 0;
+    const isSucceeded = liveState === 1;
+    const isFinalized = liveState === 2;
+    const isFailed = liveState === 3;
+    const isCancelled = liveState === 4;
+    const estimatedTokens = amount && parseFloat(amount) > 0 && launch.tokenPrice > 0
+        ? Math.floor(parseFloat(amount) / launch.tokenPrice)
         : 0;
+
+    // ── Write operations ──
+    const { writeContract, data: txHash, isPending, error: txError, reset: resetTx } = useWriteContract();
+    const { isLoading: txConfirming, isSuccess: txConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+
+    useEffect(() => {
+        if (txConfirmed) {
+            setTxStatus("✅ Transaction confirmed!");
+            setAmount("");
+            refetchUser();
+            setTimeout(() => { setTxStatus(null); resetTx(); }, 3000);
+        }
+        if (txError) {
+            setTxStatus(`❌ ${txError.message?.slice(0, 100)}`);
+            setTimeout(() => setTxStatus(null), 5000);
+        }
+    }, [txConfirmed, txError]);
+
+    const handleContribute = () => {
+        if (!amount || parseFloat(amount) <= 0) return;
+        writeContract({
+            address: addr,
+            abi: LAUNCH_ABI,
+            functionName: "contribute",
+            value: parseEther(amount),
+        });
+        setTxStatus("⏳ Confirming contribution...");
+    };
+
+    const handleClaimTokens = () => {
+        writeContract({
+            address: addr,
+            abi: LAUNCH_ABI,
+            functionName: "claimTokens",
+        });
+        setTxStatus("⏳ Claiming tokens...");
+    };
+
+    const handleClaimRefund = () => {
+        writeContract({
+            address: addr,
+            abi: LAUNCH_ABI,
+            functionName: "claimRefund",
+        });
+        setTxStatus("⏳ Claiming refund...");
+    };
+
+    const handleFinalize = () => {
+        writeContract({
+            address: addr,
+            abi: LAUNCH_ABI,
+            functionName: "finalize",
+        });
+        setTxStatus("⏳ Finalizing launch...");
+    };
+
+    const handleCheckState = () => {
+        writeContract({
+            address: addr,
+            abi: LAUNCH_ABI,
+            functionName: "checkState",
+        });
+        setTxStatus("⏳ Checking state...");
+    };
+
+    const isTxPending = isPending || txConfirming;
+
+    // Compute allocation percentages
+    const totalTokens = launch.totalSupply || 1;
+    const allocation = [
+        { label: "Sale", percent: Math.round((launch.tokensForSale / totalTokens) * 100), color: "var(--cyan)" },
+        { label: "Liquidity", percent: Math.round((launch.tokensForLP / totalTokens) * 100), color: "var(--acid)" },
+        { label: "Staking", percent: Math.round((launch.tokensForStaking / totalTokens) * 100), color: "var(--magenta)" },
+        { label: "Creator", percent: Math.max(0, 100 - Math.round((launch.tokensForSale / totalTokens) * 100) - Math.round((launch.tokensForLP / totalTokens) * 100) - Math.round((launch.tokensForStaking / totalTokens) * 100)), color: "var(--gold)" },
+    ];
 
     return (
         <div>
@@ -79,16 +204,16 @@ export default function TokenDetail({
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontFamily: "var(--font-display)", fontWeight: 800,
                         fontSize: 26, color: "var(--void)",
-                    }}>{tokenData.symbol.charAt(0)}</div>
+                    }}>{launch.symbol.charAt(0)}</div>
                     <div>
                         <h2 style={{
                             fontFamily: "var(--font-display)", fontSize: 32, fontWeight: 800,
                             color: "var(--text-primary)", lineHeight: 1.1, margin: 0,
-                        }}>{tokenData.name}</h2>
+                        }}>{launch.name}</h2>
                         <div style={{
                             fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700,
                             color: "var(--text-secondary)", marginTop: 4,
-                        }}>${tokenData.symbol}</div>
+                        }}>${launch.symbol}</div>
                     </div>
                 </div>
 
@@ -111,6 +236,18 @@ export default function TokenDetail({
                     }}>{stateInfo.label}</span>
                 </div>
             </div>
+
+            {/* Tx Status Banner */}
+            {txStatus && (
+                <div style={{
+                    padding: "12px 20px", marginBottom: 20, borderRadius: "var(--radius-md)",
+                    background: txStatus.startsWith("✅") ? "rgba(106,168,106,0.1)" : txStatus.startsWith("❌") ? "rgba(193,85,126,0.1)" : "rgba(74,178,196,0.1)",
+                    border: `1px solid ${txStatus.startsWith("✅") ? "var(--acid)" : txStatus.startsWith("❌") ? "var(--magenta)" : "var(--cyan)"}40`,
+                    fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-primary)", fontWeight: 600,
+                }}>
+                    {txStatus}
+                </div>
+            )}
 
             {/* Main 2-col grid */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 400px", gap: 24 }}>
@@ -151,8 +288,8 @@ export default function TokenDetail({
                         padding: 24, minHeight: 320,
                     }}>
                         {activeTab === "chart"
-                            ? <TokenChart symbol={tokenData.symbol} />
-                            : <GameEmbed tokenSymbol={tokenData.symbol} />
+                            ? <TokenChart symbol={launch.symbol} />
+                            : <GameEmbed tokenSymbol={launch.symbol} />
                         }
                     </div>
 
@@ -171,11 +308,15 @@ export default function TokenDetail({
                             color: "var(--text-secondary)", lineHeight: 1.7, margin: 0,
                             fontWeight: 500,
                         }}>
-                            <strong style={{ color: "var(--text-primary)" }}>{tokenData.name}</strong> is a community-driven project launched on HeadStart.
+                            <strong style={{ color: "var(--text-primary)" }}>{launch.name}</strong> is a community-driven project launched on HeadStart.
                             Contributors receive tokens proportional to their HBAR contribution
                             after finalization. Liquidity is automatically added to SaucerSwap,
                             and staking rewards are distributed over time.
                         </p>
+                        <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <InfoChip label="Contract" value={`${launch.launchContract.slice(0, 8)}...${launch.launchContract.slice(-6)}`} />
+                            <InfoChip label="Creator" value={`${launch.creator.slice(0, 8)}...${launch.creator.slice(-6)}`} />
+                        </div>
                     </div>
 
                     {/* Token allocation */}
@@ -190,7 +331,7 @@ export default function TokenDetail({
                         }}>Token Allocation</div>
 
                         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                            {ALLOCATION.map(a => (
+                            {allocation.map(a => (
                                 <div key={a.label} style={{
                                     display: "flex", alignItems: "center", gap: 12
                                 }}>
@@ -230,19 +371,17 @@ export default function TokenDetail({
                         background: "var(--void-light)",
                         border: "1px solid var(--void-border)", borderRadius: "var(--radius-lg)", padding: 24,
                     }}>
-                        {/* Big raised amount */}
                         <div style={{ marginBottom: 16 }}>
                             <div style={{
                                 fontFamily: "var(--font-mono)", fontSize: 32, fontWeight: 800,
                                 color: isLive ? "var(--cyan)" : "var(--text-primary)", lineHeight: 1,
-                            }}>{formatNum(tokenData.totalRaised)} ℏ</div>
+                            }}>{formatNum(liveRaised)} ℏ</div>
                             <div style={{
                                 fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600,
                                 color: "var(--text-secondary)", marginTop: 6,
-                            }}>raised of {formatNum(tokenData.hardCap)} ℏ goal</div>
+                            }}>raised of {formatNum(launch.hardCap)} ℏ goal</div>
                         </div>
 
-                        {/* Progress bar */}
                         <div style={{
                             width: "100%", height: 10,
                             background: "rgba(255,255,255,0.06)", borderRadius: 5,
@@ -261,22 +400,21 @@ export default function TokenDetail({
                             }}>{progress.toFixed(1)}% funded</span>
                             <span style={{
                                 fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-secondary)", fontWeight: 600
-                            }}>soft {formatNum(tokenData.softCap)} ℏ</span>
+                            }}>soft {formatNum(launch.softCap)} ℏ</span>
                         </div>
 
-                        {/* Key stats */}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 24 }}>
                             {[
-                                { label: "Backers", value: tokenData.contributors.toLocaleString(), color: "var(--text-primary)" },
+                                { label: "Backers", value: launch.contributors.toLocaleString(), color: "var(--text-primary)" },
                                 {
                                     label: "Time Left",
-                                    value: tokenData.timeRemaining > 0
-                                        ? `${Math.floor(tokenData.timeRemaining / 86400)}d ${Math.floor((tokenData.timeRemaining % 86400) / 3600)}h`
+                                    value: liveTimeRemaining > 0
+                                        ? `${Math.floor(liveTimeRemaining / 86400)}d ${Math.floor((liveTimeRemaining % 86400) / 3600)}h`
                                         : "Ended",
                                     color: "var(--gold)"
                                 },
-                                { label: "Asset Price", value: `${tokenData.tokenPrice.toFixed(4)} ℏ`, color: "var(--text-primary)" },
-                                { label: "Status", value: ["Active", "Succeeded", "Finalized", "Failed"][tokenData.state], color: stateInfo.color },
+                                { label: "Token Price", value: launch.tokenPrice > 0 ? `${launch.tokenPrice.toFixed(6)} ℏ` : "TBD", color: "var(--text-primary)" },
+                                { label: "Status", value: ["Active", "Succeeded", "Finalized", "Failed", "Cancelled"][liveState] || "Unknown", color: stateInfo.color },
                             ].map(s => (
                                 <div key={s.label} style={{
                                     background: "rgba(255,255,255,0.03)",
@@ -295,6 +433,26 @@ export default function TokenDetail({
                                 </div>
                             ))}
                         </div>
+
+                        {/* User contribution info */}
+                        {userAddress && userContribution > 0 && (
+                            <div style={{
+                                marginTop: 16, padding: "12px 14px",
+                                background: "rgba(74,178,196,0.06)",
+                                border: "1px solid rgba(74,178,196,0.15)",
+                                borderRadius: "var(--radius-sm)",
+                            }}>
+                                <div style={{
+                                    fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 600,
+                                    color: "var(--text-secondary)", textTransform: "uppercase",
+                                    letterSpacing: "0.08em", marginBottom: 4,
+                                }}>Your Contribution</div>
+                                <div style={{
+                                    fontFamily: "var(--font-mono)", fontSize: 18,
+                                    fontWeight: 800, color: "var(--cyan)",
+                                }}>{userContribution.toFixed(4)} ℏ</div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Contribute card (live only) */}
@@ -302,7 +460,7 @@ export default function TokenDetail({
                         <div style={{
                             background: "var(--void-light)",
                             border: "1px solid var(--cyan-dim)", borderRadius: "var(--radius-lg)", padding: 24,
-                            boxShadow: "0 8px 32px rgba(0,240,255,0.05)",
+                            boxShadow: "0 8px 32px rgba(74,178,196,0.05)",
                         }}>
                             <div style={{
                                 fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700,
@@ -337,63 +495,179 @@ export default function TokenDetail({
                                         fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600,
                                         color: "var(--text-secondary)", marginTop: 8,
                                     }}>
-                                        ≈ <span style={{ color: "var(--cyan)" }}>{estimatedTokens.toLocaleString()}</span> {tokenData.symbol} assets
+                                        ≈ <span style={{ color: "var(--cyan)" }}>{estimatedTokens.toLocaleString()}</span> {launch.symbol} tokens
                                     </div>
                                 )}
                             </div>
 
                             {!isConnected ? (
-                                <ConnectButton.Custom>
-                                    {({ openConnectModal }: any) => (
-                                        <button
-                                            className="btn-primary"
-                                            onClick={openConnectModal}
-                                            style={{
-                                                width: "100%", padding: "16px", fontSize: 16,
-                                            }}
-                                        >Connect Wallet</button>
-                                    )}
-                                </ConnectButton.Custom>
+                                <ConnectWalletInline label="Connect Wallet" />
                             ) : (
                                 <button
                                     className="btn-primary"
-                                    disabled={!amount || isNaN(Number(amount)) || Number(amount) <= 0}
+                                    disabled={!amount || isNaN(Number(amount)) || Number(amount) <= 0 || isTxPending}
+                                    onClick={handleContribute}
                                     style={{
                                         width: "100%", padding: "16px", fontSize: 16,
-                                        opacity: (!amount || isNaN(Number(amount)) || Number(amount) <= 0) ? 0.4 : 1,
+                                        opacity: (!amount || isNaN(Number(amount)) || Number(amount) <= 0 || isTxPending) ? 0.4 : 1,
                                     }}
                                 >
-                                    Submit {amount ? `${amount} HBAR` : ""}
+                                    {isTxPending ? "⏳ Confirming..." : `Contribute ${amount ? `${amount} HBAR` : ""}`}
                                 </button>
                             )}
                         </div>
                     )}
 
-                    {/* Claim card (finalized) */}
+                    {/* Succeeded: Finalize + Check State */}
+                    {isSucceeded && (
+                        <div style={{
+                            background: "var(--void-light)",
+                            border: "1px solid var(--gold)40", borderRadius: "var(--radius-lg)", padding: 24,
+                        }}>
+                            <div style={{
+                                fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 800,
+                                color: "var(--gold)", textTransform: "uppercase",
+                                letterSpacing: "0.08em", marginBottom: 12,
+                            }}>Launch Succeeded</div>
+                            <p style={{
+                                fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500,
+                                color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 16,
+                            }}>
+                                The fundraise is complete! Finalize to create LP on SaucerSwap and enable staking.
+                            </p>
+                            <button
+                                className="btn-primary"
+                                onClick={handleFinalize}
+                                disabled={isTxPending}
+                                style={{
+                                    width: "100%", padding: "16px", fontSize: 16,
+                                    background: "var(--gold)", color: "var(--void)",
+                                    opacity: isTxPending ? 0.4 : 1,
+                                }}
+                            >
+                                {isTxPending ? "⏳ Finalizing..." : "🚀 Finalize Launch"}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Finalized: Claim tokens */}
                     {isFinalized && (
                         <div style={{
                             background: "var(--void-light)",
                             border: "1px solid var(--magenta-dim)", borderRadius: "var(--radius-lg)", padding: 24,
-                            boxShadow: "0 8px 32px rgba(255,0,110,0.05)",
+                            boxShadow: "0 8px 32px rgba(193,85,126,0.05)",
                         }}>
                             <div style={{
                                 fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 800,
                                 color: "var(--magenta)", textTransform: "uppercase",
                                 letterSpacing: "0.08em", marginBottom: 12,
-                            }}>Claim Assets</div>
+                            }}>Claim Tokens</div>
                             <p style={{
                                 fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500,
                                 color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 20,
                             }}>
-                                The launch has successfully finalized! Your allocated <strong style={{ color: "var(--text-primary)" }}>{tokenData.symbol}</strong> assets are ready.
+                                The launch has finalized! Your <strong style={{ color: "var(--text-primary)" }}>{launch.symbol}</strong> tokens are ready.
                             </p>
-                            <button className="btn-primary" style={{
-                                width: "100%", padding: "16px", fontSize: 16,
-                            }}>Claim {tokenData.symbol}</button>
+                            {userClaimed ? (
+                                <div style={{
+                                    padding: "12px 20px", borderRadius: "var(--radius-md)",
+                                    background: "rgba(106,168,106,0.1)", border: "1px solid var(--acid)40",
+                                    fontFamily: "var(--font-mono)", fontSize: 14, color: "var(--acid)",
+                                    fontWeight: 700, textAlign: "center",
+                                }}>
+                                    ✅ Already Claimed
+                                </div>
+                            ) : (
+                                <button
+                                    className="btn-primary"
+                                    onClick={handleClaimTokens}
+                                    disabled={isTxPending || userContribution <= 0}
+                                    style={{
+                                        width: "100%", padding: "16px", fontSize: 16,
+                                        opacity: (isTxPending || userContribution <= 0) ? 0.4 : 1,
+                                    }}
+                                >
+                                    {isTxPending ? "⏳ Claiming..." : `Claim ${launch.symbol}`}
+                                </button>
+                            )}
                         </div>
+                    )}
+
+                    {/* Failed/Cancelled: Refund */}
+                    {(isFailed || isCancelled) && (
+                        <div style={{
+                            background: "var(--void-light)",
+                            border: "1px solid var(--magenta)40", borderRadius: "var(--radius-lg)", padding: 24,
+                        }}>
+                            <div style={{
+                                fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 800,
+                                color: "var(--magenta)", textTransform: "uppercase",
+                                letterSpacing: "0.08em", marginBottom: 12,
+                            }}>{isFailed ? "Launch Failed" : "Launch Cancelled"}</div>
+                            <p style={{
+                                fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500,
+                                color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 16,
+                            }}>
+                                {isFailed ? "Soft cap was not reached." : "The creator cancelled this launch."} Claim your refund below.
+                            </p>
+                            <button
+                                className="btn-primary"
+                                onClick={handleClaimRefund}
+                                disabled={isTxPending || userContribution <= 0}
+                                style={{
+                                    width: "100%", padding: "16px", fontSize: 16,
+                                    background: "var(--magenta)",
+                                    opacity: (isTxPending || userContribution <= 0) ? 0.4 : 1,
+                                }}
+                            >
+                                {isTxPending ? "⏳ Refunding..." : `Claim Refund${userContribution > 0 ? ` (${userContribution.toFixed(4)} ℏ)` : ""}`}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Check State button (when live and time may have ended) */}
+                    {isLive && liveTimeRemaining <= 0 && (
+                        <button
+                            onClick={handleCheckState}
+                            disabled={isTxPending}
+                            style={{
+                                width: "100%", padding: "14px", fontSize: 14,
+                                background: "rgba(255,255,255,0.05)",
+                                border: "1px solid var(--void-border)",
+                                borderRadius: "var(--radius-md)",
+                                color: "var(--text-primary)",
+                                fontFamily: "var(--font-display)", fontWeight: 700,
+                                cursor: "pointer", textTransform: "uppercase",
+                                letterSpacing: "0.05em",
+                                opacity: isTxPending ? 0.4 : 1,
+                            }}
+                        >
+                            ⚡ Update Launch State
+                        </button>
                     )}
                 </div>
             </div>
+        </div>
+    );
+}
+
+function InfoChip({ label, value }: { label: string; value: string }) {
+    return (
+        <div style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 6, padding: "4px 10px",
+        }}>
+            <span style={{
+                fontFamily: "var(--font-body)", fontSize: 11,
+                color: "var(--text-dim)", textTransform: "uppercase",
+                letterSpacing: "0.05em", fontWeight: 600,
+            }}>{label}</span>
+            <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 12,
+                color: "var(--text-secondary)", fontWeight: 700,
+            }}>{value}</span>
         </div>
     );
 }

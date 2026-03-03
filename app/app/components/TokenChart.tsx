@@ -51,11 +51,11 @@ export default function TokenChart({ symbol }: TokenChartProps) {
             crosshair: {
                 mode: 0,
                 vertLine: {
-                    color: "rgba(0, 240, 255, 0.3)",
+                    color: "rgba(74, 178, 196, 0.3)",
                     labelBackgroundColor: "#0f0f24",
                 },
                 horzLine: {
-                    color: "rgba(0, 240, 255, 0.3)",
+                    color: "rgba(74, 178, 196, 0.3)",
                     labelBackgroundColor: "#0f0f24",
                 },
             },

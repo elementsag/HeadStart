@@ -1,6 +1,6 @@
 "use client";
 
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ConnectWalletButton } from "./ConnectWallet";
 import { useState } from "react";
 
 export default function Navbar({
@@ -125,10 +125,7 @@ export default function Navbar({
 
                 {/* Wallet */}
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                    <ConnectButton
-                        showBalance={false}
-                        chainStatus="icon"
-                    />
+                    <ConnectWalletButton />
 
                     {/* Mobile menu toggle */}
                     <button

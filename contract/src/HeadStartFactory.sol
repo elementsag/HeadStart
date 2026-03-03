@@ -18,6 +18,9 @@ contract HeadStartFactory {
     address public feeRecipient;
     uint256 public platformFeeBps = 250; // 2.5%
     uint256 public launchCount;
+    
+    // SaucerSwap V1 Router V3 on Hedera Testnet (0.0.19264)
+    address public dexRouter = 0x0000000000000000000000000000000000004b40;
 
     struct LaunchInfo {
         address launchContract;
@@ -55,6 +58,8 @@ contract HeadStartFactory {
     event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
     event FeeUpdated(uint256 oldFee, uint256 newFee);
 
+    event DexRouterUpdated(address indexed oldRouter, address indexed newRouter);
+
     // ═══════════════════════════════════════════════════════════════
     //                         MODIFIERS
     // ═══════════════════════════════════════════════════════════════
@@ -88,7 +93,6 @@ contract HeadStartFactory {
      * @param _lpPercent Percentage of raised funds going to LP (in bps, e.g., 5000 = 50%)
      * @param _stakingRewardPercent Percentage of total supply allocated to staking rewards (in bps)
      * @param _stakingDuration Duration for the staking reward period
-     * @param _dexRouter Address of the DEX router for LP creation (e.g., SaucerSwap)
      * @param _isGame Whether this launch is a Game (true) or a Project (false)
      * @param _gameUri Optional URI linking to the game's manifest or URL
      */
@@ -102,15 +106,19 @@ contract HeadStartFactory {
         uint256 _lpPercent,
         uint256 _stakingRewardPercent,
         uint256 _stakingDuration,
-        address _dexRouter,
         bool _isGame,
         string memory _gameUri
     ) external returns (uint256 launchId, address launchAddr, address stakingAddr) {
         require(_hardCap > 0, "HeadStartFactory: hardCap must be > 0");
         require(_softCap > 0 && _softCap <= _hardCap, "HeadStartFactory: invalid softCap");
         require(_totalSupply > 0, "HeadStartFactory: totalSupply must be > 0");
+        require(_lpPercent >= 1000, "HeadStartFactory: lpPercent too low");
         require(_lpPercent <= 8000, "HeadStartFactory: lpPercent too high");
         require(_stakingRewardPercent <= 3000, "HeadStartFactory: staking reward too high");
+        require(
+            _lpPercent + _stakingRewardPercent + 500 <= 10000,
+            "HeadStartFactory: total allocation exceeds 100%"
+        );
 
         launchId = launchCount;
 
@@ -132,7 +140,7 @@ contract HeadStartFactory {
             platformFeeBps,
             feeRecipient,
             address(staking),
-            _dexRouter,
+            dexRouter,
             msg.sender,
             _isGame,
             _gameUri
@@ -208,6 +216,11 @@ contract HeadStartFactory {
         uint256 old = platformFeeBps;
         platformFeeBps = _feeBps;
         emit FeeUpdated(old, _feeBps);
+    }
+
+    function setDexRouter(address _newRouter) external onlyOwner {
+        emit DexRouterUpdated(dexRouter, _newRouter);
+        dexRouter = _newRouter;
     }
 
     function transferOwnership(address _newOwner) external onlyOwner {

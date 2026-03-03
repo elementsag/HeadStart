@@ -14,10 +14,11 @@ export interface LaunchCardData {
 }
 
 const STATE = {
-    0: { label: "Live", color: "var(--acid)", bg: "rgba(57,255,20,0.08)", dot: true },
+    0: { label: "Live", color: "var(--acid)", bg: "rgba(106,168,106,0.08)", dot: true },
     1: { label: "Succeeded", color: "var(--gold)", bg: "rgba(255,215,0,0.08)", dot: false },
-    2: { label: "Finalized", color: "var(--cyan)", bg: "rgba(0,240,255,0.08)", dot: false },
-    3: { label: "Failed", color: "var(--magenta)", bg: "rgba(255,0,110,0.08)", dot: false },
+    2: { label: "Finalized", color: "var(--cyan)", bg: "rgba(74,178,196,0.08)", dot: false },
+    3: { label: "Failed", color: "var(--magenta)", bg: "rgba(193,85,126,0.08)", dot: false },
+    4: { label: "Cancelled", color: "var(--text-dim)", bg: "rgba(255,255,255,0.05)", dot: false },
 } as const;
 
 function formatTime(seconds: number): string {
@@ -66,7 +67,7 @@ export default function LaunchCard({
             onMouseEnter={(e) => {
                 (e.currentTarget as HTMLDivElement).style.transform = "translateY(-4px)";
                 (e.currentTarget as HTMLDivElement).style.borderColor = "var(--cyan-dim)";
-                (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 32px rgba(0,240,255,0.1)";
+                (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 32px rgba(74,178,196,0.1)";
             }}
             onMouseLeave={(e) => {
                 (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)";

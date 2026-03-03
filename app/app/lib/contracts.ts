@@ -1,16 +1,18 @@
+import { parseAbi } from 'viem';
+
 // Contract ABIs for HeadStart platform
 // These are simplified ABIs - replace with full ABIs from forge build output
 
-export const FACTORY_ABI = [
-  "function createLaunch(string _name, string _symbol, uint256 _totalSupply, uint256 _hardCap, uint256 _softCap, uint256 _launchDuration, uint256 _lpPercent, uint256 _stakingRewardPercent, uint256 _stakingDuration, address _dexRouter) external returns (uint256, address, address)",
-  "function launches(uint256) external view returns (address launchContract, address stakingContract, address creator, string name, string symbol, uint256 createdAt, bool active)",
+export const FACTORY_ABI = parseAbi([
+  "function createLaunch(string _name, string _symbol, uint256 _totalSupply, uint256 _hardCap, uint256 _softCap, uint256 _launchDuration, uint256 _lpPercent, uint256 _stakingRewardPercent, uint256 _stakingDuration, bool _isGame, string _gameUri) external returns (uint256, address, address)",
+  "function launches(uint256) external view returns (address launchContract, address stakingContract, address creator, string name, string symbol, bool isGame, string gameUri, uint256 createdAt, bool active)",
   "function launchCount() external view returns (uint256)",
-  "function getLaunch(uint256 _launchId) external view returns (tuple(address launchContract, address stakingContract, address creator, string name, string symbol, uint256 createdAt, bool active))",
+  "function getLaunch(uint256 _launchId) external view returns ((address launchContract, address stakingContract, address creator, string name, string symbol, bool isGame, string gameUri, uint256 createdAt, bool active))",
   "function getAllLaunches() external view returns (address[])",
-  "event LaunchCreated(uint256 indexed launchId, address indexed launchContract, address indexed stakingContract, address creator, string name, string symbol, uint256 hardCap, uint256 totalSupply)"
-];
+  "event LaunchCreated(uint256 indexed launchId, address indexed launchContract, address indexed stakingContract, address creator, string name, string symbol, bool isGame, string gameUri, uint256 hardCap, uint256 totalSupply)"
+]);
 
-export const LAUNCH_ABI = [
+export const LAUNCH_ABI = parseAbi([
   "function contribute() external payable",
   "function finalize() external",
   "function claimTokens() external",
@@ -36,14 +38,19 @@ export const LAUNCH_ABI = [
   "function getTokenPrice() external view returns (uint256)",
   "function token() external view returns (address)",
   "function creator() external view returns (address)",
-  "function getLaunchInfo() external view returns (string, string, uint256, uint256, uint256, uint256, uint256, uint8, uint256, address)",
+  "function getLaunchInfo() external view returns (string, string, uint256, uint256, uint256, uint256, uint256, uint8, uint256, address, bool, string)",
+  "function withdrawLP() external",
+  "function withdrawPendingHbar() external",
   "event Contributed(address indexed contributor, uint256 amount, uint256 totalRaised)",
   "event LaunchFinalized(address indexed lpPair, uint256 lpHbar, uint256 lpTokens)",
   "event TokensClaimed(address indexed claimer, uint256 amount)",
-  "event RefundClaimed(address indexed claimer, uint256 amount)"
-];
+  "event RefundClaimed(address indexed claimer, uint256 amount)",
+  "event LaunchCancelled()",
+  "event StateChanged(uint8 oldState, uint8 newState)",
+  "event LPCreationFailed(string reason)"
+]);
 
-export const STAKING_ABI = [
+export const STAKING_ABI = parseAbi([
   "function stake(uint256 _amount) external",
   "function unstake(uint256 _amount) external",
   "function claimReward() external",
@@ -62,9 +69,9 @@ export const STAKING_ABI = [
   "event Staked(address indexed user, uint256 amount)",
   "event Unstaked(address indexed user, uint256 amount)",
   "event RewardClaimed(address indexed user, uint256 reward)"
-];
+]);
 
-export const ERC20_ABI = [
+export const ERC20_ABI = parseAbi([
   "function name() view returns (string)",
   "function symbol() view returns (string)",
   "function decimals() view returns (uint8)",
@@ -73,12 +80,12 @@ export const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
   "function allowance(address owner, address spender) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)"
-];
+]);
 
 // Replace with your deployed addresses
 export const CONTRACTS = {
-  FACTORY: "0x0000000000000000000000000000000000000000", // Deploy and set
-  DEX_ROUTER: "0x0000000000000000000000000000000000000000", // SaucerSwap router
+  FACTORY: "0x0E01FCB4599B6f29f00118E65ED7868DCbB6f07A", // Deploy and set
+  DEX_ROUTER: "0x0000000000000000000000000000000000004b40", // SaucerSwap router
 };
 
 // Hedera Network Config

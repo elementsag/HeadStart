@@ -8,87 +8,15 @@ import type { LaunchCardData } from "./components/LaunchCard";
 import TokenDetail from "./components/TokenDetail";
 import CreateLaunch from "./components/CreateLaunch";
 import StakingPanel from "./components/StakingPanel";
-
-// Mock launch data
-const MOCK_LAUNCHES: LaunchCardData[] = [
-  {
-    id: 0,
-    name: "HeadStart Token",
-    symbol: "HDST",
-    totalRaised: 47500,
-    hardCap: 100000,
-    softCap: 25000,
-    contributors: 342,
-    timeRemaining: 86400 * 3 + 3600 * 8,
-    state: 0,
-    tokenPrice: 0.000133,
-  },
-  {
-    id: 1,
-    name: "Nebula Finance",
-    symbol: "NEBU",
-    totalRaised: 180000,
-    hardCap: 200000,
-    softCap: 50000,
-    contributors: 891,
-    timeRemaining: 86400 * 1 + 3600 * 2,
-    state: 0,
-    tokenPrice: 0.000267,
-  },
-  {
-    id: 2,
-    name: "Quantum Swap",
-    symbol: "QSWP",
-    totalRaised: 500000,
-    hardCap: 500000,
-    softCap: 100000,
-    contributors: 2103,
-    timeRemaining: 0,
-    state: 2,
-    tokenPrice: 0.000667,
-  },
-  {
-    id: 3,
-    name: "HashVault",
-    symbol: "HVLT",
-    totalRaised: 12000,
-    hardCap: 75000,
-    softCap: 20000,
-    contributors: 67,
-    timeRemaining: 86400 * 12,
-    state: 0,
-    tokenPrice: 0.0001,
-  },
-  {
-    id: 4,
-    name: "Pixel Protocol",
-    symbol: "PIXL",
-    totalRaised: 350000,
-    hardCap: 350000,
-    softCap: 80000,
-    contributors: 1456,
-    timeRemaining: 0,
-    state: 2,
-    tokenPrice: 0.000467,
-  },
-  {
-    id: 5,
-    name: "SolarFlare",
-    symbol: "SFLR",
-    totalRaised: 5000,
-    hardCap: 150000,
-    softCap: 30000,
-    contributors: 23,
-    timeRemaining: 86400 * 25,
-    state: 0,
-    tokenPrice: 0.0002,
-  },
-];
+import { useLaunches } from "./lib/hooks";
+import type { LiveLaunchData } from "./lib/hooks";
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState("hero");
-  const [selectedLaunch, setSelectedLaunch] = useState<LaunchCardData | null>(null);
+  const [selectedLaunch, setSelectedLaunch] = useState<LiveLaunchData | null>(null);
   const [filter, setFilter] = useState<"all" | "live" | "ended">("all");
+
+  const { launches, isLoading, count } = useLaunches();
 
   const navigate = (section: string) => {
     setActiveSection(section);
@@ -98,7 +26,21 @@ export default function Home() {
     }
   };
 
-  const filteredLaunches = MOCK_LAUNCHES.filter((l) => {
+  // Map live launches to LaunchCardData format for the cards
+  const launchCards: LaunchCardData[] = launches.map((l) => ({
+    id: l.id,
+    name: l.name,
+    symbol: l.symbol,
+    totalRaised: l.totalRaised,
+    hardCap: l.hardCap,
+    softCap: l.softCap,
+    contributors: l.contributors,
+    timeRemaining: l.timeRemaining,
+    state: l.state,
+    tokenPrice: l.tokenPrice,
+  }));
+
+  const filteredLaunches = launchCards.filter((l) => {
     if (filter === "live") return l.state === 0;
     if (filter === "ended") return l.state === 2 || l.state === 1;
     return true;
@@ -151,7 +93,11 @@ export default function Home() {
                     fontSize: 14,
                   }}
                 >
-                  Discover and participate in the latest project launches on Hedera
+                  {isLoading
+                    ? "Loading launches from chain..."
+                    : count > 0
+                      ? `${count} project${count !== 1 ? "s" : ""} launched on Hedera`
+                      : "No launches yet — be the first to create one!"}
                 </p>
               </div>
 
@@ -172,27 +118,55 @@ export default function Home() {
               </div>
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-                gap: 16,
-              }}
-            >
-              {filteredLaunches.map((launch) => (
-                <LaunchCard
-                  key={launch.id}
-                  launch={launch}
-                  onClick={() => {
-                    setSelectedLaunch(launch);
-                    setActiveSection("launches");
-                    window.scrollTo({ top: 0, behavior: "smooth" });
+            {/* Loading state */}
+            {isLoading && (
+              <div
+                className="glass-card"
+                style={{
+                  padding: 60,
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: 48, marginBottom: 16, animation: "float 2s ease-in-out infinite" }}>⏳</div>
+                <p
+                  style={{
+                    fontFamily: "var(--font-body)",
+                    color: "var(--text-secondary)",
+                    fontWeight: 600,
                   }}
-                />
-              ))}
-            </div>
+                >
+                  Loading launches from Hedera Testnet...
+                </p>
+              </div>
+            )}
 
-            {filteredLaunches.length === 0 && (
+            {/* Launch grid */}
+            {!isLoading && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+                  gap: 16,
+                }}
+              >
+                {filteredLaunches.map((card) => (
+                  <LaunchCard
+                    key={card.id}
+                    launch={card}
+                    onClick={() => {
+                      const live = launches.find((l) => l.id === card.id);
+                      if (live) {
+                        setSelectedLaunch(live);
+                        setActiveSection("launches");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {!isLoading && filteredLaunches.length === 0 && (
               <div
                 className="glass-card"
                 style={{
@@ -207,7 +181,9 @@ export default function Home() {
                     color: "var(--text-dim)",
                   }}
                 >
-                  No launches found with the selected filter
+                  {count === 0
+                    ? "No launches deployed yet. Create the first one!"
+                    : "No launches found with the selected filter"}
                 </p>
               </div>
             )}
@@ -217,7 +193,7 @@ export default function Home() {
         {/* TOKEN DETAIL */}
         {activeSection === "launches" && selectedLaunch && (
           <TokenDetail
-            tokenData={selectedLaunch}
+            launch={selectedLaunch}
             onBack={() => setSelectedLaunch(null)}
           />
         )}
@@ -230,207 +206,7 @@ export default function Home() {
 
         {/* PORTFOLIO SECTION */}
         {activeSection === "portfolio" && (
-          <div>
-            <h2
-              style={{
-                fontFamily: "var(--font-display)",
-                fontSize: 28,
-                fontWeight: 800,
-                marginBottom: 8,
-                color: "var(--text-primary)",
-              }}
-            >
-              Portfolio
-            </h2>
-            <p
-              style={{
-                fontFamily: "var(--font-body)",
-                color: "var(--text-secondary)",
-                fontSize: 14,
-                marginBottom: 32,
-              }}
-            >
-              Track your contributions, claimed assets, and staking positions.
-            </p>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                gap: 20,
-                marginBottom: 32,
-              }}
-            >
-              {[
-                {
-                  label: "Total Invested",
-                  value: "12,500 ℏ",
-                  color: "var(--cyan)",
-                  icon: "💰",
-                },
-                {
-                  label: "Total Assets",
-                  value: "5 Assets",
-                  color: "var(--acid)",
-                  icon: "🪙",
-                },
-                {
-                  label: "Staking Rewards",
-                  value: "3,240 HDST",
-                  color: "var(--magenta)",
-                  icon: "⛏️",
-                },
-                {
-                  label: "Active Stakes",
-                  value: "2 Pools",
-                  color: "var(--gold)",
-                  icon: "📊",
-                },
-              ].map((s) => (
-                <div
-                  key={s.label}
-                  className="glass-card"
-                  style={{ padding: 24, position: "relative", overflow: "hidden" }}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: 2,
-                      background: s.color,
-                    }}
-                  />
-                  <div style={{ fontSize: 28, marginBottom: 12 }}>{s.icon}</div>
-                  <div
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 22,
-                      fontWeight: 700,
-                      color: s.color,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {s.value}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "var(--font-body)",
-                      fontSize: 12,
-                      color: "var(--text-dim)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                    }}
-                  >
-                    {s.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Recent activity */}
-            <div className="glass-card" style={{ padding: 24 }}>
-              <h3
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: "var(--text-primary)",
-                  marginBottom: 20,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                }}
-              >
-                Recent Activity
-              </h3>
-              {[
-                {
-                  action: "Contributed",
-                  token: "HDST",
-                  amount: "5,000 ℏ",
-                  time: "2h ago",
-                  color: "var(--cyan)",
-                },
-                {
-                  action: "Staked",
-                  token: "QSWP",
-                  amount: "500,000 QSWP",
-                  time: "1d ago",
-                  color: "var(--acid)",
-                },
-                {
-                  action: "Claimed",
-                  token: "PIXL",
-                  amount: "750,000 PIXL",
-                  time: "3d ago",
-                  color: "var(--magenta)",
-                },
-                {
-                  action: "Reward",
-                  token: "HDST",
-                  amount: "3,240 HDST",
-                  time: "5d ago",
-                  color: "var(--gold)",
-                },
-              ].map((a, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "14px 0",
-                    borderBottom:
-                      i < 3 ? "1px solid var(--void-border)" : "none",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: a.color,
-                      }}
-                    />
-                    <div>
-                      <div
-                        style={{
-                          fontFamily: "var(--font-body)",
-                          fontSize: 14,
-                          color: "var(--text-primary)",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {a.action}{" "}
-                        <span style={{ color: a.color }}>{a.token}</span>
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: "var(--font-mono)",
-                          fontSize: 12,
-                          color: "var(--text-dim)",
-                        }}
-                      >
-                        {a.time}
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 14,
-                      color: "var(--text-primary)",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {a.amount}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <PortfolioSection launches={launches} />
         )}
       </div>
 
@@ -510,6 +286,207 @@ export default function Home() {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    PORTFOLIO SECTION
+// ═══════════════════════════════════════════════════════════════
+
+function PortfolioSection({ launches }: { launches: LiveLaunchData[] }) {
+  const activeLaunches = launches.filter((l) => l.state === 0).length;
+  const finalizedLaunches = launches.filter((l) => l.state === 2).length;
+
+  return (
+    <div>
+      <h2
+        style={{
+          fontFamily: "var(--font-display)",
+          fontSize: 28,
+          fontWeight: 800,
+          marginBottom: 8,
+          color: "var(--text-primary)",
+        }}
+      >
+        Portfolio
+      </h2>
+      <p
+        style={{
+          fontFamily: "var(--font-body)",
+          color: "var(--text-secondary)",
+          fontSize: 14,
+          marginBottom: 32,
+        }}
+      >
+        Track your contributions, claimed assets, and staking positions.
+      </p>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gap: 20,
+          marginBottom: 32,
+        }}
+      >
+        {[
+          {
+            label: "Total Launches",
+            value: `${launches.length}`,
+            color: "var(--cyan)",
+            icon: "🚀",
+          },
+          {
+            label: "Active Launches",
+            value: `${activeLaunches}`,
+            color: "var(--acid)",
+            icon: "🟢",
+          },
+          {
+            label: "Finalized",
+            value: `${finalizedLaunches}`,
+            color: "var(--magenta)",
+            icon: "✅",
+          },
+          {
+            label: "Has Staking",
+            value: `${launches.filter((l) => l.tokensForStaking > 0).length} Pools`,
+            color: "var(--gold)",
+            icon: "📊",
+          },
+        ].map((s) => (
+          <div
+            key={s.label}
+            className="glass-card"
+            style={{ padding: 24, position: "relative", overflow: "hidden" }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 2,
+                background: s.color,
+              }}
+            />
+            <div style={{ fontSize: 28, marginBottom: 12 }}>{s.icon}</div>
+            <div
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 22,
+                fontWeight: 700,
+                color: s.color,
+                marginBottom: 4,
+              }}
+            >
+              {s.value}
+            </div>
+            <div
+              style={{
+                fontFamily: "var(--font-body)",
+                fontSize: 12,
+                color: "var(--text-dim)",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+              }}
+            >
+              {s.label}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Launches list */}
+      <div className="glass-card" style={{ padding: 24 }}>
+        <h3
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 16,
+            fontWeight: 700,
+            color: "var(--text-primary)",
+            marginBottom: 20,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          All Deployed Launches
+        </h3>
+        {launches.length === 0 ? (
+          <p
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: 14,
+              color: "var(--text-dim)",
+            }}
+          >
+            No launches found. Create one to get started!
+          </p>
+        ) : (
+          launches.map((l, i) => {
+            const stateLabels = ["Active", "Succeeded", "Finalized", "Failed", "Cancelled"];
+            const stateColors = ["var(--acid)", "var(--gold)", "var(--cyan)", "var(--magenta)", "var(--text-dim)"];
+            return (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "14px 0",
+                  borderBottom: i < launches.length - 1 ? "1px solid var(--void-border)" : "none",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: stateColors[l.state] || "var(--text-dim)",
+                    }}
+                  />
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-body)",
+                        fontSize: 14,
+                        color: "var(--text-primary)",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {l.name}{" "}
+                      <span style={{ color: stateColors[l.state] || "var(--text-dim)" }}>
+                        ${l.symbol}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 12,
+                        color: "var(--text-dim)",
+                      }}
+                    >
+                      {stateLabels[l.state] || "Unknown"} · {l.totalRaised.toFixed(2)} ℏ raised
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 14,
+                    color: "var(--text-primary)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {l.contributors} backers
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }

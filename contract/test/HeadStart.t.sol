@@ -81,6 +81,7 @@ contract HeadStartFactoryTest is Test {
     function setUp() public {
         dexRouter = new MockDEXRouter();
         factory = new HeadStartFactory(feeRecipient);
+        factory.setDexRouter(address(dexRouter));
         vm.deal(creator, 1_000_000e18);
         vm.deal(alice, 1_000_000e18);
         vm.deal(bob, 1_000_000e18);
@@ -100,7 +101,7 @@ contract HeadStartFactoryTest is Test {
         (uint256 launchId, address launchAddr, address stakingAddr) = factory.createLaunch(
             NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, SOFT_CAP,
             LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT,
-            STAKING_DURATION, address(dexRouter), false, ""
+            STAKING_DURATION, false, ""
         );
 
         assertEq(launchId, 0);
@@ -122,7 +123,7 @@ contract HeadStartFactoryTest is Test {
         (uint256 launchId,, ) = factory.createLaunch(
             "Game Token", "GAME", TOTAL_SUPPLY, HARD_CAP, SOFT_CAP,
             LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT,
-            STAKING_DURATION, address(0), true, "https://game.example.com"
+            STAKING_DURATION, true, "https://game.example.com"
         );
 
         HeadStartFactory.LaunchInfo memory info = factory.getLaunch(launchId);
@@ -132,8 +133,8 @@ contract HeadStartFactoryTest is Test {
 
     function test_CreateLaunch_MultipleByCreator() public {
         vm.startPrank(creator);
-        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, address(0), false, "");
-        factory.createLaunch("Token2", "TK2", TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, address(0), false, "");
+        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, false, "");
+        factory.createLaunch("Token2", "TK2", TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, false, "");
         vm.stopPrank();
 
         uint256[] memory cLaunches = factory.getCreatorLaunches(creator);
@@ -145,37 +146,37 @@ contract HeadStartFactoryTest is Test {
     function test_CreateLaunch_RevertZeroHardCap() public {
         vm.prank(creator);
         vm.expectRevert("HeadStartFactory: hardCap must be > 0");
-        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, 0, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, address(0), false, "");
+        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, 0, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, false, "");
     }
 
     function test_CreateLaunch_RevertZeroSoftCap() public {
         vm.prank(creator);
         vm.expectRevert("HeadStartFactory: invalid softCap");
-        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, 0, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, address(0), false, "");
+        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, 0, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, false, "");
     }
 
     function test_CreateLaunch_RevertSoftCapExceedsHardCap() public {
         vm.prank(creator);
         vm.expectRevert("HeadStartFactory: invalid softCap");
-        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, HARD_CAP + 1, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, address(0), false, "");
+        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, HARD_CAP + 1, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, false, "");
     }
 
     function test_CreateLaunch_RevertZeroTotalSupply() public {
         vm.prank(creator);
         vm.expectRevert("HeadStartFactory: totalSupply must be > 0");
-        factory.createLaunch(NAME, SYMBOL, 0, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, address(0), false, "");
+        factory.createLaunch(NAME, SYMBOL, 0, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT, STAKING_DURATION, false, "");
     }
 
     function test_CreateLaunch_RevertLPPercentTooHigh() public {
         vm.prank(creator);
         vm.expectRevert("HeadStartFactory: lpPercent too high");
-        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, 8001, STAKING_REWARD_PERCENT, STAKING_DURATION, address(0), false, "");
+        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, 8001, STAKING_REWARD_PERCENT, STAKING_DURATION, false, "");
     }
 
     function test_CreateLaunch_RevertStakingTooHigh() public {
         vm.prank(creator);
         vm.expectRevert("HeadStartFactory: staking reward too high");
-        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, 3001, STAKING_DURATION, address(0), false, "");
+        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, LP_PERCENT, 3001, STAKING_DURATION, false, "");
     }
 
     // ── Admin ─────────────────────────────────
@@ -209,6 +210,19 @@ contract HeadStartFactoryTest is Test {
         vm.prank(alice);
         vm.expectRevert("HeadStartFactory: not owner");
         factory.setFeeRecipient(alice);
+    }
+
+    function test_CreateLaunch_RevertLPPercentTooLow() public {
+        vm.prank(creator);
+        vm.expectRevert("HeadStartFactory: lpPercent too low");
+        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, 999, STAKING_REWARD_PERCENT, STAKING_DURATION, false, "");
+    }
+
+    function test_CreateLaunch_RevertTotalAllocationOverflow() public {
+        vm.prank(creator);
+        vm.expectRevert("HeadStartFactory: total allocation exceeds 100%");
+        // 8000 + 2000 + 500 = 10500 > 10000
+        factory.createLaunch(NAME, SYMBOL, TOTAL_SUPPLY, HARD_CAP, SOFT_CAP, LAUNCH_DURATION, 8000, 2000, STAKING_DURATION, false, "");
     }
 }
 
@@ -245,6 +259,7 @@ contract HeadStartLaunchTest is Test {
     function setUp() public {
         dexRouter = new MockDEXRouter();
         factory = new HeadStartFactory(feeRecipient);
+        factory.setDexRouter(address(dexRouter));
 
         vm.deal(creator, 1_000_000e18);
         vm.deal(alice, 1_000_000e18);
@@ -255,7 +270,7 @@ contract HeadStartLaunchTest is Test {
         (, address launchAddr, address stakingAddr) = factory.createLaunch(
             "Test Token", "TEST", TOTAL_SUPPLY, HARD_CAP, SOFT_CAP,
             LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT,
-            90 days, address(dexRouter), false, ""
+            90 days, false, ""
         );
 
         launch = HeadStartLaunch(payable(launchAddr));
@@ -412,12 +427,14 @@ contract HeadStartLaunchTest is Test {
 
     function test_Finalize_Success_NoDEX() public {
         // Create a launch without DEX
+        factory.setDexRouter(address(0));
         vm.prank(creator);
         (, address launchAddr2, address stakingAddr2) = factory.createLaunch(
             "Token2", "TK2", TOTAL_SUPPLY, HARD_CAP, SOFT_CAP,
             LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT,
-            90 days, address(0), false, ""
+            90 days, false, ""
         );
+        factory.setDexRouter(address(dexRouter));
 
         HeadStartLaunch launch2 = HeadStartLaunch(payable(launchAddr2));
 
@@ -460,12 +477,14 @@ contract HeadStartLaunchTest is Test {
         uint256 aliceContrib,
         uint256 bobContrib
     ) internal returns (HeadStartLaunch l, IERC20 t) {
+        factory.setDexRouter(address(0));
         vm.prank(creator);
         (, address la, ) = factory.createLaunch(
             "Claim Test", "CLM", TOTAL_SUPPLY, HARD_CAP, SOFT_CAP,
             LAUNCH_DURATION, LP_PERCENT, STAKING_REWARD_PERCENT,
-            90 days, address(0) /* no DEX */, false, ""
+            90 days, false, ""
         );
+        factory.setDexRouter(address(dexRouter));
         l = HeadStartLaunch(payable(la));
         t = IERC20(address(l.token()));
 
@@ -570,7 +589,7 @@ contract HeadStartLaunchTest is Test {
         emit LaunchCancelled();
         launch.cancel();
 
-        assertEq(uint256(launch.state()), 3); // FAILED
+        assertEq(uint256(launch.state()), 4); // CANCELLED
     }
 
     function test_Cancel_AllowsRefunds() public {
@@ -691,7 +710,7 @@ contract HeadStartStakingTest is Test {
     uint256 constant TOTAL_SUPPLY = 1_000_000_000e18;
     uint256 constant HARD_CAP = 100_000e18;
     uint256 constant SOFT_CAP = 25_000e18;
-    uint256 constant LP_PERCENT = 0;               // No LP for simplicity
+    uint256 constant LP_PERCENT = 1000;               // 10% to LP (minimum)
     uint256 constant STAKING_REWARD_PERCENT = 1500; // 15%
     uint256 constant STAKING_DURATION = 90 days;
 
@@ -702,6 +721,7 @@ contract HeadStartStakingTest is Test {
     function setUp() public {
         dexRouter = new MockDEXRouter();
         factory = new HeadStartFactory(feeRecipient);
+        factory.setDexRouter(address(dexRouter));
 
         vm.deal(creator, 1_000_000e18);
         vm.deal(alice, 1_000_000e18);
@@ -713,7 +733,7 @@ contract HeadStartStakingTest is Test {
         (, address launchAddr, address stakingAddr) = factory.createLaunch(
             "Stake Token", "STK", TOTAL_SUPPLY, HARD_CAP, SOFT_CAP,
             7 days, LP_PERCENT, STAKING_REWARD_PERCENT,
-            STAKING_DURATION, address(0), false, ""
+            STAKING_DURATION, false, ""
         );
 
         launch = HeadStartLaunch(payable(launchAddr));
@@ -1084,6 +1104,7 @@ contract HeadStartStakingTest is Test {
 
 contract HeadStartIntegrationTest is Test {
     HeadStartFactory public factory;
+    MockDEXRouter public dexRouter;
     address public feeRecipient = makeAddr("feeRecipient");
     address public creator = makeAddr("creator");
     address public alice = makeAddr("alice");
@@ -1091,7 +1112,9 @@ contract HeadStartIntegrationTest is Test {
     address public charlie = makeAddr("charlie");
 
     function setUp() public {
+        dexRouter = new MockDEXRouter();
         factory = new HeadStartFactory(feeRecipient);
+        factory.setDexRouter(address(dexRouter));
         vm.deal(creator, 1_000_000e18);
         vm.deal(alice, 1_000_000e18);
         vm.deal(bob, 1_000_000e18);
@@ -1108,7 +1131,7 @@ contract HeadStartIntegrationTest is Test {
         vm.prank(creator);
         (, address launchAddr, address stakingAddr) = factory.createLaunch(
             "Full Token", "FULL", totalSupply, hardCap, softCap,
-            7 days, 0 /* no LP */, 2000, 90 days, address(0), false, ""
+            7 days, 1000 /* 10% LP */, 2000, 90 days, false, ""
         );
 
         HeadStartLaunch launch = HeadStartLaunch(payable(launchAddr));
@@ -1185,7 +1208,7 @@ contract HeadStartIntegrationTest is Test {
         vm.prank(creator);
         (, address launchAddr, ) = factory.createLaunch(
             "Failed Token", "FAIL", 1_000_000e18, 100_000e18, 50_000e18,
-            7 days, 0, 1500, 90 days, address(0), false, ""
+            7 days, 1000, 1500, 90 days, false, ""
         );
         HeadStartLaunch launch = HeadStartLaunch(payable(launchAddr));
 
