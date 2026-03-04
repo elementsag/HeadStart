@@ -37,56 +37,49 @@ export default function TokenDetail({
 
     const addr = launch.launchContract as `0x${string}`;
 
-    // ── Read user-specific data from chain ──
+    // ── Read live data from chain (including user-specific if connected) ──
     const launchAbi = LAUNCH_ABI as any;
+    const baseCalls = [
+        { address: addr, abi: launchAbi, functionName: "totalRaised" as const },
+        { address: addr, abi: launchAbi, functionName: "state" as const },
+        { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
+        { address: addr, abi: launchAbi, functionName: "getTokenPrice" as const },
+        { address: addr, abi: launchAbi, functionName: "hardCap" as const },
+        { address: addr, abi: launchAbi, functionName: "contributorCount" as const },
+    ];
+    // indices: 0=totalRaised, 1=state, 2=timeRemaining, 3=tokenPrice, 4=hardCap, 5=contributorCount
+    // user-specific start at index 6
     const userCalls = userAddress
         ? [
+            ...baseCalls,
             { address: addr, abi: launchAbi, functionName: "contributions" as const, args: [userAddress] },
             { address: addr, abi: launchAbi, functionName: "hasClaimed" as const, args: [userAddress] },
-            { address: addr, abi: launchAbi, functionName: "totalRaised" as const },
-            { address: addr, abi: launchAbi, functionName: "state" as const },
-            { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
         ]
-        : [
-            { address: addr, abi: launchAbi, functionName: "totalRaised" as const },
-            { address: addr, abi: launchAbi, functionName: "state" as const },
-            { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
-        ];
+        : baseCalls;
 
     const { data: userData, refetch: refetchUser } = useReadContracts({
         contracts: userCalls,
-        query: { enabled: true, refetchInterval: 10_000 },
+        query: { enabled: true, refetchInterval: 8_000 },
     });
 
-    // Extract live values
-    let liveRaised = launch.totalRaised;
-    let liveState = launch.state;
-    let liveTimeRemaining = launch.timeRemaining;
-    let userContribution = 0;
-    let userClaimed = false;
+    // Extract live values — always read from chain when available
+    const getVal = (idx: number): any => {
+        if (!userData || !userData[idx]) return undefined;
+        const d = userData[idx];
+        return d && d.status === "success" ? d.result : undefined;
+    };
 
-    if (userData && userAddress) {
-        const getVal = (idx: number) => {
-            const d = userData[idx];
-            return d && d.status === "success" ? d.result : undefined;
-        };
-        userContribution = parseFloat(formatEther((getVal(0) as bigint) || 0n));
-        userClaimed = (getVal(1) as boolean) || false;
-        liveRaised = parseFloat(formatEther((getVal(2) as bigint) || 0n));
-        liveState = Number((getVal(3) as bigint) || 0n);
-        liveTimeRemaining = Number((getVal(4) as bigint) || 0n);
-    } else if (userData && !userAddress) {
-        const getVal = (idx: number) => {
-            const d = userData[idx];
-            return d && d.status === "success" ? d.result : undefined;
-        };
-        liveRaised = parseFloat(formatEther((getVal(0) as bigint) || 0n));
-        liveState = Number((getVal(1) as bigint) || 0n);
-        liveTimeRemaining = Number((getVal(2) as bigint) || 0n);
-    }
+    const liveRaised = userData ? parseFloat(formatEther((getVal(0) as bigint) || 0n)) : launch.totalRaised;
+    const liveState = userData ? Number((getVal(1) as bigint) || 0n) : launch.state;
+    const liveTimeRemaining = userData ? Number((getVal(2) as bigint) || 0n) : launch.timeRemaining;
+    const liveTokenPrice = userData ? parseFloat(formatEther((getVal(3) as bigint) || 0n)) : launch.tokenPrice;
+    const liveHardCap = userData ? parseFloat(formatEther((getVal(4) as bigint) || 0n)) : launch.hardCap;
+    const liveContributors = userData ? Number((getVal(5) as bigint) || 0n) : launch.contributors;
+    const userContribution = userAddress && userData ? parseFloat(formatEther((getVal(6) as bigint) || 0n)) : 0;
+    const userClaimed = userAddress && userData ? ((getVal(7) as boolean) || false) : false;
 
-    const progress = launch.hardCap > 0
-        ? Math.min((liveRaised / launch.hardCap) * 100, 100)
+    const progress = liveHardCap > 0
+        ? Math.min((liveRaised / liveHardCap) * 100, 100)
         : 0;
 
     const stateInfo = STATE_INFO[liveState] || STATE_INFO[0];
@@ -95,8 +88,8 @@ export default function TokenDetail({
     const isFinalized = liveState === 2;
     const isFailed = liveState === 3;
     const isCancelled = liveState === 4;
-    const estimatedTokens = amount && parseFloat(amount) > 0 && launch.tokenPrice > 0
-        ? Math.floor(parseFloat(amount) / launch.tokenPrice)
+    const estimatedTokens = amount && parseFloat(amount) > 0 && liveTokenPrice > 0
+        ? Math.floor(parseFloat(amount) / liveTokenPrice)
         : 0;
 
     // ── Write operations ──
@@ -379,7 +372,7 @@ export default function TokenDetail({
                             <div style={{
                                 fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600,
                                 color: "var(--text-secondary)", marginTop: 6,
-                            }}>raised of {formatNum(launch.hardCap)} ℏ goal</div>
+                            }}>raised of {formatNum(liveHardCap)} ℏ goal</div>
                         </div>
 
                         <div style={{
@@ -405,7 +398,7 @@ export default function TokenDetail({
 
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 24 }}>
                             {[
-                                { label: "Backers", value: launch.contributors.toLocaleString(), color: "var(--text-primary)" },
+                                { label: "Backers", value: liveContributors.toLocaleString(), color: "var(--text-primary)" },
                                 {
                                     label: "Time Left",
                                     value: liveTimeRemaining > 0
@@ -413,7 +406,7 @@ export default function TokenDetail({
                                         : "Ended",
                                     color: "var(--gold)"
                                 },
-                                { label: "Token Price", value: launch.tokenPrice > 0 ? `${launch.tokenPrice.toFixed(6)} ℏ` : "TBD", color: "var(--text-primary)" },
+                                { label: "Token Price", value: liveTokenPrice > 0 ? `${liveTokenPrice.toFixed(6)} ℏ` : "TBD", color: "var(--text-primary)" },
                                 { label: "Status", value: ["Active", "Succeeded", "Finalized", "Failed", "Cancelled"][liveState] || "Unknown", color: stateInfo.color },
                             ].map(s => (
                                 <div key={s.label} style={{

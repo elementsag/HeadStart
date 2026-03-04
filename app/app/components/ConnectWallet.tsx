@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useAccount, useConnect, useDisconnect, useChainId } from "wagmi";
 
 // ── ConnectWalletButton (Navbar) ─────────────────────────
@@ -143,6 +144,7 @@ export function ConnectWalletInline({ label = "Connect Wallet" }: { label?: stri
 // ── Wallet Connection Modal ──────────────────────────────
 function WalletModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const { connectors, connect, error, isPending } = useConnect();
+    const { isConnected } = useAccount();
     const [localError, setLocalError] = useState<string | null>(null);
 
     // EIP-6963 automatically detects injected wallets like HashPack and MetaMask
@@ -160,15 +162,24 @@ function WalletModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
         }
     };
 
+    // Auto-close modal when connected
+    useEffect(() => {
+        if (isConnected && isOpen) {
+            onClose();
+        }
+    }, [isConnected, isOpen, onClose]);
+
     if (!isOpen) return null;
 
-    return (
-        <div style={{
+    // Use portal to render at body level — escapes navbar's backdrop-filter
+    // which creates a new containing block and breaks position:fixed centering
+    return createPortal(
+        <div className="wallet-modal-overlay" style={{
             position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
             background: "rgba(0, 0, 5, 0.8)", backdropFilter: "blur(12px)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            zIndex: 9999, animation: "fadeIn 0.2s ease-out", padding: "20px"
-        }}>
+            zIndex: 99999, padding: "20px"
+        }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="glass-card" style={{
                 position: "relative", width: "100%", maxWidth: "420px", padding: "32px",
                 animation: "scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
@@ -267,6 +278,7 @@ function WalletModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
                     </div>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

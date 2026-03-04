@@ -2,13 +2,7 @@
 
 import { useReadContract, useReadContracts, useAccount } from "wagmi";
 import { formatEther } from "viem";
-import { CONTRACTS, FACTORY_ABI as _FACTORY_ABI, LAUNCH_ABI as _LAUNCH_ABI, STAKING_ABI as _STAKING_ABI, ERC20_ABI as _ERC20_ABI } from "./contracts";
-
-// Cast human-readable ABIs to any for wagmi compat
-const FACTORY_ABI = _FACTORY_ABI as any;
-const LAUNCH_ABI = _LAUNCH_ABI as any;
-const STAKING_ABI = _STAKING_ABI as any;
-const ERC20_ABI = _ERC20_ABI as any;
+import { CONTRACTS, FACTORY_ABI, LAUNCH_ABI, STAKING_ABI, ERC20_ABI } from "./contracts";
 
 // ═══════════════════════════════════════════════════════════════
 //                    LAUNCH LIST HOOK
@@ -39,20 +33,15 @@ export interface LiveLaunchData {
 }
 
 const factoryAddress = CONTRACTS.FACTORY as `0x${string}`;
+const factoryAbi = FACTORY_ABI as any;
+const launchAbi = LAUNCH_ABI as any;
+const stakingAbi = STAKING_ABI as any;
+const erc20Abi = ERC20_ABI as any;
 
 /**
- * Hook to read the launch count from the factory
- */
-export function useLaunchCount() {
-    return useReadContract({
-        address: factoryAddress,
-        abi: FACTORY_ABI,
-        functionName: "launchCount",
-    });
-}
-
-/**
- * Hook to read all launches from factory and their on-chain details
+ * Hook to read all launches from factory and their on-chain details.
+ * Uses getLaunchInfo() on each launch contract (individual eth_calls)
+ * to avoid multicall dependency which may not be available on Hedera.
  */
 export function useLaunches() {
     // Step 1: Get the launch count
@@ -62,16 +51,18 @@ export function useLaunches() {
         error: countError,
     } = useReadContract({
         address: factoryAddress,
-        abi: FACTORY_ABI,
+        abi: factoryAbi,
         functionName: "launchCount",
     });
 
     const count = countData ? Number(countData) : 0;
 
-    // Step 2: Build calls to get each launch from factory
+    // Step 2: Get each launch info from factory (individual calls, no multicall needed)
+    // We use useReadContracts but Hedera may not have multicall3 — so we build
+    // the calls and handle failures gracefully.
     const factoryCalls = Array.from({ length: count }, (_, i) => ({
         address: factoryAddress,
-        abi: FACTORY_ABI,
+        abi: factoryAbi,
         functionName: "getLaunch" as const,
         args: [BigInt(i)],
     }));
@@ -80,99 +71,125 @@ export function useLaunches() {
         data: launchInfos,
         isLoading: infosLoading,
     } = useReadContracts({
-        contracts: factoryCalls,
+        contracts: factoryCalls as any,
         query: { enabled: count > 0 },
     });
 
-    // Step 3: For each launch address, read its on-chain state
+    // Step 3: For each launch address, call getLaunchInfo() which returns
+    // all data in ONE eth_call per launch — avoids multicall3 issues on Hedera
     const launchAddresses: `0x${string}`[] = [];
+    const stakingAddresses: string[] = [];
+    const creators: string[] = [];
+    const names: string[] = [];
+    const symbols: string[] = [];
+    const isGames: boolean[] = [];
+    const gameUris: string[] = [];
+
     if (launchInfos) {
         for (const info of launchInfos) {
             if (info.status === "success" && info.result) {
                 const r = info.result as any;
-                launchAddresses.push(r.launchContract || r[0]);
+                launchAddresses.push((r.launchContract || r[0]) as `0x${string}`);
+                stakingAddresses.push(r.stakingContract || r[1]);
+                creators.push(r.creator || r[2]);
+                names.push(r.name || r[3]);
+                symbols.push(r.symbol || r[4]);
+                isGames.push(r.isGame ?? r[5] ?? false);
+                gameUris.push(r.gameUri || r[6] || "");
             }
         }
     }
 
-    // Build multicall for detailed launch data
-    const detailCalls = launchAddresses.flatMap((addr) => [
-        { address: addr, abi: LAUNCH_ABI, functionName: "totalRaised" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "hardCap" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "softCap" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "contributorCount" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "getTimeRemaining" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "state" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "getTokenPrice" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "token" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "launchEnd" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "totalSupply" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "tokensForSale" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "tokensForLP" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "tokensForStaking" as const },
+    // Call getLaunchInfo() on each launch contract — returns everything in one eth_call
+    const launchInfoCalls = launchAddresses.map((addr) => ({
+        address: addr,
+        abi: launchAbi,
+        functionName: "getLaunchInfo" as const,
+    }));
+
+    // Also get extra fields not in getLaunchInfo
+    const extraCalls = launchAddresses.flatMap((addr) => [
+        { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
+        { address: addr, abi: launchAbi, functionName: "getTokenPrice" as const },
+        { address: addr, abi: launchAbi, functionName: "tokensForSale" as const },
+        { address: addr, abi: launchAbi, functionName: "tokensForLP" as const },
+        { address: addr, abi: launchAbi, functionName: "tokensForStaking" as const },
     ]);
 
     const {
-        data: detailData,
-        isLoading: detailsLoading,
+        data: launchInfoData,
+        isLoading: infoLoading,
     } = useReadContracts({
-        contracts: detailCalls,
-        query: { enabled: launchAddresses.length > 0 },
+        contracts: launchInfoCalls as any,
+        query: { enabled: launchAddresses.length > 0, refetchInterval: 15_000 },
+    });
+
+    const {
+        data: extraData,
+        isLoading: extraLoading,
+    } = useReadContracts({
+        contracts: extraCalls as any,
+        query: { enabled: launchAddresses.length > 0, refetchInterval: 15_000 },
     });
 
     // Step 4: Merge everything
     const launches: LiveLaunchData[] = [];
-    if (launchInfos && detailData) {
-        const fieldsPerLaunch = 13;
+    if (launchInfoData) {
         for (let i = 0; i < launchAddresses.length; i++) {
-            const info = launchInfos[i];
-            if (info.status !== "success" || !info.result) continue;
-            const r = info.result as any;
+            const infoD = launchInfoData[i];
+            if (!infoD || infoD.status !== "success" || !infoD.result) continue;
 
-            const offset = i * fieldsPerLaunch;
-            const getValue = (idx: number): bigint => {
-                const d = detailData[offset + idx];
+            // getLaunchInfo returns: (name, symbol, totalSupply, hardCap, softCap, totalRaised, launchEnd, state, contributorCount, tokenAddress, isGame, gameUri)
+            const r = infoD.result as any;
+            const rArr = Array.isArray(r) ? r : Object.values(r);
+
+            const extraOffset = i * 5;
+            const getExtra = (idx: number): bigint => {
+                if (!extraData) return 0n;
+                const d = extraData[extraOffset + idx];
                 if (d && d.status === "success" && d.result !== undefined) return d.result as bigint;
                 return 0n;
             };
-            const getAddr = (idx: number): string => {
-                const d = detailData[offset + idx];
-                if (d && d.status === "success" && d.result !== undefined) return d.result as string;
-                return "0x0000000000000000000000000000000000000000";
-            };
 
-            const hardCap = getValue(1);
-            const tokenPrice = getValue(6);
+            const totalSupplyVal = rArr[2] as bigint || 0n;
+            const hardCapVal = rArr[3] as bigint || 0n;
+            const softCapVal = rArr[4] as bigint || 0n;
+            const totalRaisedVal = rArr[5] as bigint || 0n;
+            const launchEndVal = rArr[6] as bigint || 0n;
+            const stateVal = Number(rArr[7] || 0);
+            const contributorCountVal = Number(rArr[8] || 0);
+            const tokenAddrVal = (rArr[9] || "0x0000000000000000000000000000000000000000") as string;
+            const tokenPriceVal = getExtra(1);
 
             launches.push({
                 id: i,
-                name: r.name || r[3],
-                symbol: r.symbol || r[4],
-                launchContract: r.launchContract || r[0],
-                stakingContract: r.stakingContract || r[1],
-                creator: r.creator || r[2],
-                isGame: r.isGame ?? r[5] ?? false,
-                gameUri: r.gameUri || r[6] || "",
-                totalRaised: parseFloat(formatEther(getValue(0))),
-                hardCap: parseFloat(formatEther(hardCap)),
-                softCap: parseFloat(formatEther(getValue(2))),
-                contributors: Number(getValue(3)),
-                timeRemaining: Number(getValue(4)),
-                state: Number(getValue(5)),
-                tokenPrice: parseFloat(formatEther(tokenPrice)),
-                tokenAddress: getAddr(7),
-                launchEnd: Number(getValue(8)),
-                totalSupply: parseFloat(formatEther(getValue(9))),
-                tokensForSale: parseFloat(formatEther(getValue(10))),
-                tokensForLP: parseFloat(formatEther(getValue(11))),
-                tokensForStaking: parseFloat(formatEther(getValue(12))),
+                name: names[i] || (rArr[0] as string) || "",
+                symbol: symbols[i] || (rArr[1] as string) || "",
+                launchContract: launchAddresses[i],
+                stakingContract: stakingAddresses[i] || "",
+                creator: creators[i] || "",
+                isGame: isGames[i] ?? false,
+                gameUri: gameUris[i] || "",
+                totalRaised: parseFloat(formatEther(totalRaisedVal)),
+                hardCap: parseFloat(formatEther(hardCapVal)),
+                softCap: parseFloat(formatEther(softCapVal)),
+                contributors: contributorCountVal,
+                timeRemaining: Number(getExtra(0)),
+                state: stateVal,
+                tokenPrice: parseFloat(formatEther(tokenPriceVal)),
+                tokenAddress: tokenAddrVal,
+                launchEnd: Number(launchEndVal),
+                totalSupply: parseFloat(formatEther(totalSupplyVal)),
+                tokensForSale: parseFloat(formatEther(getExtra(2))),
+                tokensForLP: parseFloat(formatEther(getExtra(3))),
+                tokensForStaking: parseFloat(formatEther(getExtra(4))),
             });
         }
     }
 
     return {
         launches,
-        isLoading: countLoading || infosLoading || detailsLoading,
+        isLoading: countLoading || infosLoading || infoLoading || extraLoading,
         error: countError,
         count,
     };
@@ -187,24 +204,24 @@ export function useLaunchDetail(launchAddress: string) {
     const addr = launchAddress as `0x${string}`;
 
     const contracts = [
-        { address: addr, abi: LAUNCH_ABI, functionName: "totalRaised" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "hardCap" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "softCap" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "contributorCount" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "getTimeRemaining" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "state" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "getTokenPrice" as const },
-        { address: addr, abi: LAUNCH_ABI, functionName: "token" as const },
+        { address: addr, abi: launchAbi, functionName: "totalRaised" as const },
+        { address: addr, abi: launchAbi, functionName: "hardCap" as const },
+        { address: addr, abi: launchAbi, functionName: "softCap" as const },
+        { address: addr, abi: launchAbi, functionName: "contributorCount" as const },
+        { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
+        { address: addr, abi: launchAbi, functionName: "state" as const },
+        { address: addr, abi: launchAbi, functionName: "getTokenPrice" as const },
+        { address: addr, abi: launchAbi, functionName: "token" as const },
         ...(userAddress
             ? [
-                { address: addr, abi: LAUNCH_ABI, functionName: "contributions" as const, args: [userAddress] },
-                { address: addr, abi: LAUNCH_ABI, functionName: "hasClaimed" as const, args: [userAddress] },
+                { address: addr, abi: launchAbi, functionName: "contributions" as const, args: [userAddress] },
+                { address: addr, abi: launchAbi, functionName: "hasClaimed" as const, args: [userAddress] },
             ]
             : []),
     ];
 
     return useReadContracts({
-        contracts,
+        contracts: contracts as any,
         query: {
             enabled: !!launchAddress,
             refetchInterval: 10_000, // Refresh every 10s
@@ -244,18 +261,18 @@ export function useStakingPools() {
     const tokenAddresses = launches.map((l) => l.tokenAddress as `0x${string}`);
 
     const stakingCalls = stakingAddresses.flatMap((addr, i) => [
-        { address: addr, abi: STAKING_ABI, functionName: "totalStaked" as const },
-        { address: addr, abi: STAKING_ABI, functionName: "totalRewards" as const },
-        { address: addr, abi: STAKING_ABI, functionName: "stakingEnd" as const },
-        { address: addr, abi: STAKING_ABI, functionName: "totalStakers" as const },
-        { address: addr, abi: STAKING_ABI, functionName: "getAPR" as const },
-        { address: addr, abi: STAKING_ABI, functionName: "initialized" as const },
+        { address: addr, abi: stakingAbi, functionName: "totalStaked" as const },
+        { address: addr, abi: stakingAbi, functionName: "totalRewards" as const },
+        { address: addr, abi: stakingAbi, functionName: "stakingEnd" as const },
+        { address: addr, abi: stakingAbi, functionName: "totalStakers" as const },
+        { address: addr, abi: stakingAbi, functionName: "getAPR" as const },
+        { address: addr, abi: stakingAbi, functionName: "initialized" as const },
         // User-specific if connected
         ...(userAddress
             ? [
-                { address: addr, abi: STAKING_ABI, functionName: "stakedBalance" as const, args: [userAddress] },
-                { address: addr, abi: STAKING_ABI, functionName: "earned" as const, args: [userAddress] },
-                { address: tokenAddresses[i], abi: ERC20_ABI, functionName: "balanceOf" as const, args: [userAddress] },
+                { address: addr, abi: stakingAbi, functionName: "stakedBalance" as const, args: [userAddress] },
+                { address: addr, abi: stakingAbi, functionName: "earned" as const, args: [userAddress] },
+                { address: tokenAddresses[i], abi: erc20Abi, functionName: "balanceOf" as const, args: [userAddress] },
             ]
             : []),
     ]);
@@ -264,7 +281,7 @@ export function useStakingPools() {
         data: stakingData,
         isLoading: stakingLoading,
     } = useReadContracts({
-        contracts: stakingCalls,
+        contracts: stakingCalls as any,
         query: {
             enabled: stakingAddresses.length > 0,
             refetchInterval: 15_000,

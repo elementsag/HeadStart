@@ -42,7 +42,7 @@ export default function LaunchCard({
     onClick,
 }: {
     launch: LaunchCardData;
-    onClick: () => void;
+    onClick?: () => void;
 }) {
     const progress = launch.hardCap > 0
         ? Math.min((launch.totalRaised / launch.hardCap) * 100, 100)

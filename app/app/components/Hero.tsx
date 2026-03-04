@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
-export default function Hero({ onNavigate }: { onNavigate: (section: string) => void }) {
+export default function Hero() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [counts, setCounts] = useState({ launches: 0, raised: 0, stakers: 0 });
 
@@ -248,20 +249,20 @@ export default function Hero({ onNavigate }: { onNavigate: (section: string) => 
                         marginBottom: 72,
                     }}
                 >
-                    <button
+                    <Link
+                        href="/create"
                         className="btn-primary"
-                        onClick={() => onNavigate("create")}
-                        style={{ fontSize: 14, padding: "13px 32px", letterSpacing: "0.04em" }}
+                        style={{ fontSize: 14, padding: "13px 32px", letterSpacing: "0.04em", textDecoration: "none" }}
                     >
                         Launch Project
-                    </button>
-                    <button
+                    </Link>
+                    <Link
+                        href="/launches"
                         className="btn-secondary"
-                        onClick={() => onNavigate("launches")}
-                        style={{ fontSize: 14, padding: "13px 32px", letterSpacing: "0.04em" }}
+                        style={{ fontSize: 14, padding: "13px 32px", letterSpacing: "0.04em", textDecoration: "none" }}
                     >
                         Explore Launches
-                    </button>
+                    </Link>
                 </div>
 
                 {/* Stats */}
