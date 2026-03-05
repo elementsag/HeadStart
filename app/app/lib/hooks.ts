@@ -2,11 +2,22 @@
 
 import { useReadContract, useReadContracts, useAccount } from "wagmi";
 import { formatEther } from "viem";
+import { hederaTestnet } from "wagmi/chains";
 import { CONTRACTS, FACTORY_ABI, LAUNCH_ABI, STAKING_ABI, ERC20_ABI } from "./contracts";
 
 // ═══════════════════════════════════════════════════════════════
-//                    LAUNCH LIST HOOK
+//  IMPORTANT: Every read hook MUST include chainId so wagmi
+//  knows which chain to target even without a connected wallet.
 // ═══════════════════════════════════════════════════════════════
+const CHAIN_ID = hederaTestnet.id; // 296
+
+// ═══════════════════════════════════════════════════════════════
+//  HEDERA TINYBAR SCALING
+//  Hedera EVM stores msg.value in tinybars (8 decimals)
+//  but hardCap/softCap are set via parseEther (18 decimals).
+//  We scale tinybar values by 10^10 to normalize to 18 decimals.
+// ═══════════════════════════════════════════════════════════════
+const TINYBAR_TO_WEIBAR = 10000000000n; // 10^10
 
 export interface LiveLaunchData {
     id: number;
@@ -40,8 +51,6 @@ const erc20Abi = ERC20_ABI as any;
 
 /**
  * Hook to read all launches from factory and their on-chain details.
- * Uses getLaunchInfo() on each launch contract (individual eth_calls)
- * to avoid multicall dependency which may not be available on Hedera.
  */
 export function useLaunches() {
     // Step 1: Get the launch count
@@ -53,30 +62,39 @@ export function useLaunches() {
         address: factoryAddress,
         abi: factoryAbi,
         functionName: "launchCount",
+        chainId: CHAIN_ID,
     });
 
     const count = countData ? Number(countData) : 0;
 
-    // Step 2: Get each launch info from factory (individual calls, no multicall needed)
-    // We use useReadContracts but Hedera may not have multicall3 — so we build
-    // the calls and handle failures gracefully.
+    // Log for debugging
+    if (typeof window !== "undefined" && countData !== undefined) {
+        console.log("[HeadStart] launchCount:", count, "error:", countError?.message || "none");
+    }
+
+    // Step 2: Get each launch info from factory
     const factoryCalls = Array.from({ length: count }, (_, i) => ({
         address: factoryAddress,
         abi: factoryAbi,
         functionName: "getLaunch" as const,
         args: [BigInt(i)],
+        chainId: CHAIN_ID,
     }));
 
     const {
         data: launchInfos,
         isLoading: infosLoading,
+        error: infosError,
     } = useReadContracts({
         contracts: factoryCalls as any,
         query: { enabled: count > 0 },
     });
 
-    // Step 3: For each launch address, call getLaunchInfo() which returns
-    // all data in ONE eth_call per launch — avoids multicall3 issues on Hedera
+    if (typeof window !== "undefined" && infosError) {
+        console.error("[HeadStart] getLaunch error:", infosError);
+    }
+
+    // Step 3: Extract factory info
     const launchAddresses: `0x${string}`[] = [];
     const stakingAddresses: string[] = [];
     const creators: string[] = [];
@@ -100,20 +118,20 @@ export function useLaunches() {
         }
     }
 
-    // Call getLaunchInfo() on each launch contract — returns everything in one eth_call
+    // Step 4: Call getLaunchInfo() + extra data on each launch contract
     const launchInfoCalls = launchAddresses.map((addr) => ({
         address: addr,
         abi: launchAbi,
         functionName: "getLaunchInfo" as const,
+        chainId: CHAIN_ID,
     }));
 
-    // Also get extra fields not in getLaunchInfo
     const extraCalls = launchAddresses.flatMap((addr) => [
-        { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
-        { address: addr, abi: launchAbi, functionName: "getTokenPrice" as const },
-        { address: addr, abi: launchAbi, functionName: "tokensForSale" as const },
-        { address: addr, abi: launchAbi, functionName: "tokensForLP" as const },
-        { address: addr, abi: launchAbi, functionName: "tokensForStaking" as const },
+        { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "getTokenPrice" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "tokensForSale" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "tokensForLP" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "tokensForStaking" as const, chainId: CHAIN_ID },
     ]);
 
     const {
@@ -132,14 +150,18 @@ export function useLaunches() {
         query: { enabled: launchAddresses.length > 0, refetchInterval: 15_000 },
     });
 
-    // Step 4: Merge everything
+    // Step 5: Merge everything
     const launches: LiveLaunchData[] = [];
     if (launchInfoData) {
         for (let i = 0; i < launchAddresses.length; i++) {
             const infoD = launchInfoData[i];
-            if (!infoD || infoD.status !== "success" || !infoD.result) continue;
+            if (!infoD || infoD.status !== "success" || !infoD.result) {
+                if (typeof window !== "undefined") {
+                    console.warn("[HeadStart] getLaunchInfo failed for", launchAddresses[i], infoD);
+                }
+                continue;
+            }
 
-            // getLaunchInfo returns: (name, symbol, totalSupply, hardCap, softCap, totalRaised, launchEnd, state, contributorCount, tokenAddress, isGame, gameUri)
             const r = infoD.result as any;
             const rArr = Array.isArray(r) ? r : Object.values(r);
 
@@ -154,7 +176,10 @@ export function useLaunches() {
             const totalSupplyVal = rArr[2] as bigint || 0n;
             const hardCapVal = rArr[3] as bigint || 0n;
             const softCapVal = rArr[4] as bigint || 0n;
-            const totalRaisedVal = rArr[5] as bigint || 0n;
+            // totalRaised comes from msg.value which on Hedera is in tinybars (8 dec)
+            // Scale up by 10^10 to match hardCap/softCap which are in weibars (18 dec)
+            const totalRaisedRaw = rArr[5] as bigint || 0n;
+            const totalRaisedVal = totalRaisedRaw * TINYBAR_TO_WEIBAR;
             const launchEndVal = rArr[6] as bigint || 0n;
             const stateVal = Number(rArr[7] || 0);
             const contributorCountVal = Number(rArr[8] || 0);
@@ -204,18 +229,18 @@ export function useLaunchDetail(launchAddress: string) {
     const addr = launchAddress as `0x${string}`;
 
     const contracts = [
-        { address: addr, abi: launchAbi, functionName: "totalRaised" as const },
-        { address: addr, abi: launchAbi, functionName: "hardCap" as const },
-        { address: addr, abi: launchAbi, functionName: "softCap" as const },
-        { address: addr, abi: launchAbi, functionName: "contributorCount" as const },
-        { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
-        { address: addr, abi: launchAbi, functionName: "state" as const },
-        { address: addr, abi: launchAbi, functionName: "getTokenPrice" as const },
-        { address: addr, abi: launchAbi, functionName: "token" as const },
+        { address: addr, abi: launchAbi, functionName: "totalRaised" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "hardCap" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "softCap" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "contributorCount" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "state" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "getTokenPrice" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "token" as const, chainId: CHAIN_ID },
         ...(userAddress
             ? [
-                { address: addr, abi: launchAbi, functionName: "contributions" as const, args: [userAddress] },
-                { address: addr, abi: launchAbi, functionName: "hasClaimed" as const, args: [userAddress] },
+                { address: addr, abi: launchAbi, functionName: "contributions" as const, args: [userAddress], chainId: CHAIN_ID },
+                { address: addr, abi: launchAbi, functionName: "hasClaimed" as const, args: [userAddress], chainId: CHAIN_ID },
             ]
             : []),
     ];
@@ -224,7 +249,7 @@ export function useLaunchDetail(launchAddress: string) {
         contracts: contracts as any,
         query: {
             enabled: !!launchAddress,
-            refetchInterval: 10_000, // Refresh every 10s
+            refetchInterval: 10_000,
         },
     });
 }
@@ -252,27 +277,23 @@ export interface LiveStakingPool {
 
 export function useStakingPools() {
     const { address: userAddress } = useAccount();
-
-    // Step 1: Get all launches
     const { launches, isLoading: launchesLoading } = useLaunches();
 
-    // Step 2: For each launch, read staking contract info
     const stakingAddresses = launches.map((l) => l.stakingContract as `0x${string}`);
     const tokenAddresses = launches.map((l) => l.tokenAddress as `0x${string}`);
 
     const stakingCalls = stakingAddresses.flatMap((addr, i) => [
-        { address: addr, abi: stakingAbi, functionName: "totalStaked" as const },
-        { address: addr, abi: stakingAbi, functionName: "totalRewards" as const },
-        { address: addr, abi: stakingAbi, functionName: "stakingEnd" as const },
-        { address: addr, abi: stakingAbi, functionName: "totalStakers" as const },
-        { address: addr, abi: stakingAbi, functionName: "getAPR" as const },
-        { address: addr, abi: stakingAbi, functionName: "initialized" as const },
-        // User-specific if connected
+        { address: addr, abi: stakingAbi, functionName: "totalStaked" as const, chainId: CHAIN_ID },
+        { address: addr, abi: stakingAbi, functionName: "totalRewards" as const, chainId: CHAIN_ID },
+        { address: addr, abi: stakingAbi, functionName: "stakingEnd" as const, chainId: CHAIN_ID },
+        { address: addr, abi: stakingAbi, functionName: "totalStakers" as const, chainId: CHAIN_ID },
+        { address: addr, abi: stakingAbi, functionName: "getAPR" as const, chainId: CHAIN_ID },
+        { address: addr, abi: stakingAbi, functionName: "initialized" as const, chainId: CHAIN_ID },
         ...(userAddress
             ? [
-                { address: addr, abi: stakingAbi, functionName: "stakedBalance" as const, args: [userAddress] },
-                { address: addr, abi: stakingAbi, functionName: "earned" as const, args: [userAddress] },
-                { address: tokenAddresses[i], abi: erc20Abi, functionName: "balanceOf" as const, args: [userAddress] },
+                { address: addr, abi: stakingAbi, functionName: "stakedBalance" as const, args: [userAddress], chainId: CHAIN_ID },
+                { address: addr, abi: stakingAbi, functionName: "earned" as const, args: [userAddress], chainId: CHAIN_ID },
+                { address: tokenAddresses[i], abi: erc20Abi, functionName: "balanceOf" as const, args: [userAddress], chainId: CHAIN_ID },
             ]
             : []),
     ]);
@@ -288,7 +309,6 @@ export function useStakingPools() {
         },
     });
 
-    // Step 3: Build pools
     const pools: LiveStakingPool[] = [];
     const fieldsPerPool = userAddress ? 9 : 6;
 
@@ -308,8 +328,6 @@ export function useStakingPools() {
                 return false;
             };
 
-            const isInit = getBool(5);
-
             pools.push({
                 launchName: launch.name,
                 tokenName: launch.name,
@@ -321,7 +339,7 @@ export function useStakingPools() {
                 stakingEnd: Number(getValue(2)),
                 totalStakers: Number(getValue(3)),
                 apr: Number(getValue(4)),
-                initialized: isInit,
+                initialized: getBool(5),
                 userStaked: userAddress ? parseFloat(formatEther(getValue(6))) : 0,
                 userEarned: userAddress ? parseFloat(formatEther(getValue(7))) : 0,
                 tokenBalance: userAddress ? parseFloat(formatEther(getValue(8))) : 0,

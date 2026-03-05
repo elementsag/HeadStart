@@ -39,26 +39,27 @@ export default function TokenDetail({
 
     // ── Read live data from chain (including user-specific if connected) ──
     const launchAbi = LAUNCH_ABI as any;
+    const CHAIN_ID = 296; // hederaTestnet.id
     const baseCalls = [
-        { address: addr, abi: launchAbi, functionName: "totalRaised" as const },
-        { address: addr, abi: launchAbi, functionName: "state" as const },
-        { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const },
-        { address: addr, abi: launchAbi, functionName: "getTokenPrice" as const },
-        { address: addr, abi: launchAbi, functionName: "hardCap" as const },
-        { address: addr, abi: launchAbi, functionName: "contributorCount" as const },
+        { address: addr, abi: launchAbi, functionName: "totalRaised" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "state" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "getTimeRemaining" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "getTokenPrice" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "hardCap" as const, chainId: CHAIN_ID },
+        { address: addr, abi: launchAbi, functionName: "contributorCount" as const, chainId: CHAIN_ID },
     ];
     // indices: 0=totalRaised, 1=state, 2=timeRemaining, 3=tokenPrice, 4=hardCap, 5=contributorCount
     // user-specific start at index 6
     const userCalls = userAddress
         ? [
             ...baseCalls,
-            { address: addr, abi: launchAbi, functionName: "contributions" as const, args: [userAddress] },
-            { address: addr, abi: launchAbi, functionName: "hasClaimed" as const, args: [userAddress] },
+            { address: addr, abi: launchAbi, functionName: "contributions" as const, args: [userAddress], chainId: CHAIN_ID },
+            { address: addr, abi: launchAbi, functionName: "hasClaimed" as const, args: [userAddress], chainId: CHAIN_ID },
         ]
         : baseCalls;
 
     const { data: userData, refetch: refetchUser } = useReadContracts({
-        contracts: userCalls,
+        contracts: userCalls as any,
         query: { enabled: true, refetchInterval: 8_000 },
     });
 
@@ -69,13 +70,17 @@ export default function TokenDetail({
         return d && d.status === "success" ? d.result : undefined;
     };
 
-    const liveRaised = userData ? parseFloat(formatEther((getVal(0) as bigint) || 0n)) : launch.totalRaised;
+    // Hedera tinybar scaling: msg.value arrives in tinybars (8 dec)
+    // but hardCap/softCap use weibars (18 dec). Scale up by 10^10.
+    const TINYBAR_SCALE = 10000000000n; // 10^10
+
+    const liveRaised = userData ? parseFloat(formatEther(((getVal(0) as bigint) || 0n) * TINYBAR_SCALE)) : launch.totalRaised;
     const liveState = userData ? Number((getVal(1) as bigint) || 0n) : launch.state;
     const liveTimeRemaining = userData ? Number((getVal(2) as bigint) || 0n) : launch.timeRemaining;
     const liveTokenPrice = userData ? parseFloat(formatEther((getVal(3) as bigint) || 0n)) : launch.tokenPrice;
     const liveHardCap = userData ? parseFloat(formatEther((getVal(4) as bigint) || 0n)) : launch.hardCap;
     const liveContributors = userData ? Number((getVal(5) as bigint) || 0n) : launch.contributors;
-    const userContribution = userAddress && userData ? parseFloat(formatEther((getVal(6) as bigint) || 0n)) : 0;
+    const userContribution = userAddress && userData ? parseFloat(formatEther(((getVal(6) as bigint) || 0n) * TINYBAR_SCALE)) : 0;
     const userClaimed = userAddress && userData ? ((getVal(7) as boolean) || false) : false;
 
     const progress = liveHardCap > 0
